@@ -1,0 +1,17 @@
+Help me write using the bevy library in Rust. Tghe game is called Mountain Climber and is a a game where you are a chacter human trying to solve difficult mountainous puzzle like games that represents mountain climbing but with some abstraction and magical or supernatural elements. You need t ohave a small character like 50 x 30 px or somethin and pick if yu aregoing with one or muptiple up to 4 people. The ties are different terrin types (like  soi, ice, etc) and have different shapes nd slopes to them. the goal is to climb using your body and tools you have in your backpack. at the beginning of the game you are a t a store to get supplies, which could invclude things like tent for 70, jacket for heavt weather, ropes, harnesses, belay devices, and quickdraws 
+
+you have limited space and money to take inventory with you.
+
+You will have time so for every 25 seconds or so an hour passes, you have day and night ... without flashlight its almost impossible to see (byt moon can help you()). you can get attacked by animals like puma or cougar. or bear. you can meet other people and enter conversatio mode. you can invite people (npc) to join your band (most of the time they reject but occassionally they ccept), you can spemnd the night sleeping. you can read or play music to builf morale, you can learn magic . you can find assets such as lost items, or rocks or eggs that can be helpful. learn spells. 
+
+some spells bring an you can have elf magic, call to gods like Thor or Loki. 
+
+you can gave natural accidents like rocks falling, earthquakem, volcano, strong wind rain, whixch can damnage your health. glaceiers (jokull) cn be scaled with proper gar . .. 
+
+You have meters for health and food/water. if you run out of food and water, your health eill go don and you can die if it goes to zero. the levels go from 1 to whatervert, but the first couple are easy to learn the game. 
+
+add some icelamdic viking eements so you can build a hutr, hace animals with you (horses, sheep, cattle, goats and pig, dogs).... )
+
+I am new to  bevy so the point of ths exerecise is tolearn mmore about how to useEntity Component Systems architectute and set up propr structrs andqueries and enums. I want some way to program the levels and you can create sample ones.
+
+Dont assume any specific design. Propose designs and ask me for clarifications. I might steer it in different ways because I want to be deliberate about how i architect the gane in bevy. Use the bevy cheatbook https://bevy-cheatbook.github.io/programming as guide.
