@@ -657,3 +657,140 @@ pub fn conversation_system(
         }
     }
 }
+
+// ===== UI SYSTEMS =====
+
+pub fn setup_ui(mut commands: Commands) {
+    // Create UI root node
+    commands
+        .spawn(NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::FlexStart,
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(20.0)),
+                ..default()
+            },
+            ..default()
+        })
+        .with_children(|parent| {
+            // Health Bar Container
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Px(300.0),
+                        height: Val::Px(30.0),
+                        margin: UiRect::bottom(Val::Px(10.0)),
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    background_color: Color::srgb(0.2, 0.2, 0.2).into(), // Dark background
+                    border_color: Color::srgb(0.6, 0.6, 0.6).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // Health Bar Fill
+                    parent.spawn((
+                        NodeBundle {
+                            style: Style {
+                                width: Val::Percent(100.0), // Will be updated based on health
+                                height: Val::Percent(100.0),
+                                ..default()
+                            },
+                            background_color: Color::srgb(0.8, 0.2, 0.2).into(), // Red health bar
+                            ..default()
+                        },
+                        HealthBarFill,
+                    ));
+                })
+                .insert(HealthBar);
+            
+            // Health Label
+            parent.spawn(TextBundle::from_section(
+                "Health: 100/100",
+                TextStyle {
+                    font_size: 18.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+
+            // Stamina Bar Container
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Px(300.0),
+                        height: Val::Px(30.0),
+                        margin: UiRect::top(Val::Px(20.0)).with_bottom(Val::Px(10.0)),
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    background_color: Color::srgb(0.2, 0.2, 0.2).into(), // Dark background
+                    border_color: Color::srgb(0.6, 0.6, 0.6).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // Stamina Bar Fill
+                    parent.spawn((
+                        NodeBundle {
+                            style: Style {
+                                width: Val::Percent(100.0), // Will be updated based on stamina
+                                height: Val::Percent(100.0),
+                                ..default()
+                            },
+                            background_color: Color::srgb(0.2, 0.8, 0.2).into(), // Green stamina bar
+                            ..default()
+                        },
+                        StaminaBarFill,
+                    ));
+                })
+                .insert(StaminaBar);
+            
+            // Stamina Label
+            parent.spawn(TextBundle::from_section(
+                "Stamina: 100/100",
+                TextStyle {
+                    font_size: 18.0,
+                    color: Color::WHITE,
+                    ..default()
+                },
+            ));
+        });
+}
+
+pub fn update_health_stamina_ui(
+    player_query: Query<(&Health, &MovementStats), With<Player>>,
+    mut health_bar_query: Query<&mut Style, (With<HealthBarFill>, Without<StaminaBarFill>)>,
+    mut stamina_bar_query: Query<&mut Style, (With<StaminaBarFill>, Without<HealthBarFill>)>,
+    mut text_query: Query<&mut Text>,
+) {
+    if let Ok((health, movement_stats)) = player_query.get_single() {
+        // Update health bar width
+        for mut style in health_bar_query.iter_mut() {
+            let health_percentage = (health.current / health.max) * 100.0;
+            style.width = Val::Percent(health_percentage);
+        }
+        
+        // Update stamina bar width
+        for mut style in stamina_bar_query.iter_mut() {
+            let stamina_percentage = (movement_stats.stamina / movement_stats.max_stamina) * 100.0;
+            style.width = Val::Percent(stamina_percentage);
+        }
+        
+        // Update text labels
+        let mut texts = text_query.iter_mut().collect::<Vec<_>>();
+        if texts.len() >= 2 {
+            // Health text
+            if let Some(text_sections) = texts[0].sections.first_mut() {
+                text_sections.value = format!("Health: {:.0}/{:.0}", health.current, health.max);
+            }
+            // Stamina text
+            if let Some(text_sections) = texts[1].sections.first_mut() {
+                text_sections.value = format!("Stamina: {:.0}/{:.0}", movement_stats.stamina, movement_stats.max_stamina);
+            }
+        }
+    }
+}

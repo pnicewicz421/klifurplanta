@@ -15,7 +15,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_state::<GameState>()
-                .add_systems(Startup, (setup, load_terrain_from_level))
+        .add_systems(Startup, (setup, setup_ui, load_terrain_from_level))
         .add_systems(
             Update,
             (
@@ -23,6 +23,7 @@ fn main() {
                 player_movement_system,
                 stamina_regeneration_system,
                 health_stamina_display_system,
+                update_health_stamina_ui,
                 camera_follow_system,
                 update_time,
             ).run_if(in_state(GameState::Climbing)),

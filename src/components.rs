@@ -307,3 +307,17 @@ pub struct InConversation;
 pub struct Sleeping {
     pub time_remaining: f32,
 }
+
+// ===== UI COMPONENTS =====
+
+#[derive(Component)]
+pub struct HealthBar;
+
+#[derive(Component)]
+pub struct StaminaBar;
+
+#[derive(Component)]
+pub struct HealthBarFill;
+
+#[derive(Component)]
+pub struct StaminaBarFill;
