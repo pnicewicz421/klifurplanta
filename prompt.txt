@@ -15,3 +15,16 @@ add some icelamdic viking eements so you can build a hutr, hace animals with you
 I am new to  bevy so the point of ths exerecise is tolearn mmore about how to useEntity Component Systems architectute and set up propr structrs andqueries and enums. I want some way to program the levels and you can create sample ones.
 
 Dont assume any specific design. Propose designs and ask me for clarifications. I might steer it in different ways because I want to be deliberate about how i architect the gane in bevy. Use the bevy cheatbook https://bevy-cheatbook.github.io/programming as guide.
+
+Health & Stamina Components (already exist, need to use them)
+Stamina consumption during movement
+Health effects from terrain/environment
+Stamina regeneration when resting
+Visual feedback or logging for these systems
+
+Health/stamina systems
+Equipment/inventory management
+NPCs and dialogue
+Weather effects
+Magic spells
+Or any other feature you'd like to explore!

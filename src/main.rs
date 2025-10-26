@@ -22,6 +22,7 @@ fn main() {
                 // Phase 2+ systems with health & stamina
                 player_movement_system,
                 stamina_regeneration_system,
+                health_stamina_display_system,
                 camera_follow_system,
                 update_time,
             ).run_if(in_state(GameState::Climbing)),
@@ -63,5 +64,6 @@ fn setup(
     // Start in climbing state for Phase 1
     next_state.set(GameState::Climbing);
     
-    info!("Phase 2+: Health & Stamina active! Move=consume stamina, Rest=regenerate, Ice/Snow=cold damage!");
+    info!("🎮 Health & Stamina Active! Watch console: Move=drain stamina, Rest=regenerate, Ice/Snow=damage!");
+    info!("📊 Health/Stamina display updates every 2 seconds. Move around to see effects!");
 }

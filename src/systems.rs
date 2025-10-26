@@ -3,11 +3,12 @@ use crate::components::*;
 use crate::resources::*;
 use crate::states::*;
 
-/// Stamina and health regeneration system
+/// Stamina and health regeneration system with feedback
 pub fn stamina_regeneration_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut player_query: Query<(&mut MovementStats, &mut Health), With<Player>>,
+    mut last_regen_log: Local<f32>,
 ) {
     for (mut stats, mut health) in player_query.iter_mut() {
         // Check if player is moving (any arrow key pressed)
@@ -17,6 +18,9 @@ pub fn stamina_regeneration_system(
                        keyboard_input.pressed(KeyCode::ArrowRight);
         
         if !is_moving {
+            let old_stamina = stats.stamina;
+            let old_health = health.current;
+            
             // Regenerate stamina when not moving
             let stamina_regen_rate = 15.0; // Stamina per second when resting
             stats.stamina = (stats.stamina + stamina_regen_rate * time.delta_seconds()).min(stats.max_stamina);
@@ -24,11 +28,23 @@ pub fn stamina_regeneration_system(
             // Slow health regeneration when resting (if not in harsh conditions)
             let health_regen_rate = 2.0; // Health per second when resting
             health.current = (health.current + health_regen_rate * time.delta_seconds()).min(health.max);
+            
+            // Log regeneration periodically (every 3 seconds)
+            *last_regen_log += time.delta_seconds();
+            if *last_regen_log >= 3.0 {
+                *last_regen_log = 0.0;
+                if stats.stamina < stats.max_stamina || health.current < health.max {
+                    info!("💚 Resting... Stamina: {:.1}/100 (+{:.1}), Health: {:.1}/100 (+{:.1})", 
+                        stats.stamina, stats.stamina - old_stamina,
+                        health.current, health.current - old_health
+                    );
+                }
+            }
         }
         
         // Death check
         if health.current <= 0.0 {
-            error!("Player has died! Health reached zero.");
+            error!("💀 Player has died! Health reached zero.");
             // In a real game, you'd transition to a death/game over state here
         }
     }
@@ -166,7 +182,27 @@ pub fn camera_follow_system(
 
 // ===== PHASE 1: BASIC PLAYER MOVEMENT =====
 
-/// Advanced player movement system with stamina consumption and health management
+/// Health and stamina status display system - shows current values periodically
+pub fn health_stamina_display_system(
+    time: Res<Time>,
+    player_query: Query<(&MovementStats, &Health), With<Player>>,
+    mut last_update: Local<f32>,
+) {
+    // Update display every 2 seconds
+    *last_update += time.delta_seconds();
+    if *last_update >= 2.0 {
+        *last_update = 0.0;
+        
+        for (stats, health) in player_query.iter() {
+            info!("📊 Health: {:.1}/{:.1} | Stamina: {:.1}/{:.1}", 
+                health.current, health.max, 
+                stats.stamina, stats.max_stamina
+            );
+        }
+    }
+}
+
+/// Enhanced movement system with better stamina feedback
 pub fn player_movement_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -212,6 +248,11 @@ pub fn player_movement_system(
                 // Consume stamina
                 stats.stamina = (stats.stamina - stamina_cost).max(0.0);
                 
+                // Show stamina consumption in real-time
+                if stamina_cost > 0.0 {
+                    info!("🏃 Moving! Stamina: {:.1}/100 (-{:.1})", stats.stamina, stamina_cost);
+                }
+                
                 let movement = direction * stats.speed * terrain_modifier * time.delta_seconds();
                 let new_position = player_transform.translation + movement;
                 
@@ -222,10 +263,10 @@ pub fn player_movement_system(
                 
                 // Log stamina if getting low
                 if stats.stamina < 20.0 && stats.stamina > 0.0 {
-                    info!("Stamina low: {:.1}/100", stats.stamina);
+                    warn!("⚠️ Stamina low: {:.1}/100", stats.stamina);
                 }
             } else {
-                info!("Too exhausted to move! Stamina: {:.1}/100", stats.stamina);
+                warn!("❌ Too exhausted to move! Stamina: {:.1}/100 - Rest to recover!", stats.stamina);
             }
         }
         
@@ -283,7 +324,7 @@ fn get_stamina_cost_for_terrain(
     base_stamina_cost * delta_time // Default cost
 }
 
-/// Apply environmental effects to health
+/// Apply environmental effects to health with detailed feedback
 fn apply_environmental_effects(
     health: &mut Health,
     position: Vec3,
@@ -299,22 +340,36 @@ fn apply_environmental_effects(
             match terrain_tile.terrain_type {
                 TerrainType::Ice => {
                     // Ice can cause minor health loss from cold
-                    let cold_damage = 1.0 * delta_time;
+                    let cold_damage = 1.5 * delta_time;
+                    let old_health = health.current;
                     health.current = (health.current - cold_damage).max(0.0);
-                    if health.current < 50.0 {
-                        info!("Feeling cold on ice! Health: {:.1}/100", health.current);
+                    if health.current < old_health {
+                        warn!("🧊 Taking cold damage on ice! Health: {:.1}/100 (-{:.1})", 
+                            health.current, cold_damage);
                     }
                 }
                 TerrainType::Snow => {
                     // Snow is even colder
-                    let cold_damage = 2.0 * delta_time;
+                    let cold_damage = 3.0 * delta_time;
+                    let old_health = health.current;
                     health.current = (health.current - cold_damage).max(0.0);
-                    if health.current < 50.0 {
-                        info!("Freezing in snow! Health: {:.1}/100", health.current);
+                    if health.current < old_health {
+                        error!("❄️ Freezing in snow! Health: {:.1}/100 (-{:.1})", 
+                            health.current, cold_damage);
+                    }
+                }
+                TerrainType::Grass => {
+                    // Grass is healing
+                    let healing = 0.5 * delta_time;
+                    let old_health = health.current;
+                    health.current = (health.current + healing).min(health.max);
+                    if health.current > old_health && health.current < health.max {
+                        info!("🌱 Grass is healing you! Health: {:.1}/100 (+{:.1})", 
+                            health.current, healing);
                     }
                 }
                 _ => {
-                    // Other terrain types don't damage health
+                    // Other terrain types don't affect health
                 }
             }
             break;
