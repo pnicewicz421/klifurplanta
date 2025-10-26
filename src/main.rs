@@ -15,7 +15,10 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_state::<GameState>()
-        .add_systems(Startup, (setup, setup_ui, load_terrain_from_level))
+        .add_systems(
+            Startup, 
+            (setup, setup_ui, load_terrain_from_level, setup_starting_equipment)
+        )
         .add_systems(
             Update,
             (
@@ -26,7 +29,16 @@ fn main() {
                 update_health_stamina_ui,
                 camera_follow_system,
                 update_time,
+                // Equipment systems
+                inventory_input_system,
+                apply_equipment_bonuses,
             ).run_if(in_state(GameState::Climbing)),
+        )
+        .add_systems(OnEnter(GameState::Inventory), setup_inventory_ui)
+        .add_systems(OnExit(GameState::Inventory), cleanup_inventory_ui)
+        .add_systems(
+            Update,
+            (update_inventory_ui,).run_if(in_state(GameState::Inventory)),
         )
         .run();
 }

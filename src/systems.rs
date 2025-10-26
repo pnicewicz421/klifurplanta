@@ -794,3 +794,368 @@ pub fn update_health_stamina_ui(
         }
     }
 }
+
+// ===== INVENTORY & EQUIPMENT SYSTEMS =====
+
+pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Entity, With<Player>>) {
+    for player_entity in player_query.iter() {
+        // Create starting items
+        let ice_axe = Item {
+            id: "ice_axe_01".to_string(),
+            name: "Ice Axe".to_string(),
+            weight: 1.5,
+            item_type: ItemType::ClimbingGear,
+            durability: Some(100.0),
+            properties: ItemProperties {
+                strength: Some(15.0), // +15% climbing ability
+                warmth: None,
+                magic_power: None,
+                nutrition: None,
+                water: None,
+                protection: Some(5.0),
+            },
+        };
+        
+        let heavy_boots = Item {
+            id: "heavy_boots_01".to_string(),
+            name: "Heavy Climbing Boots".to_string(),
+            weight: 3.0,
+            item_type: ItemType::Clothing,
+            durability: Some(100.0),
+            properties: ItemProperties {
+                strength: Some(10.0), // +10% climbing ability
+                warmth: Some(20.0), // Cold protection
+                magic_power: None,
+                nutrition: None,
+                water: None,
+                protection: Some(15.0),
+            },
+        };
+        
+        let wool_jacket = Item {
+            id: "wool_jacket_01".to_string(),
+            name: "Wool Jacket".to_string(),
+            weight: 2.0,
+            item_type: ItemType::Clothing,
+            durability: Some(100.0),
+            properties: ItemProperties {
+                strength: None,
+                warmth: Some(30.0), // Good cold protection
+                magic_power: None,
+                nutrition: None,
+                water: None,
+                protection: Some(10.0),
+            },
+        };
+        
+        // Create starting inventory
+        let starting_items = vec![ice_axe.clone(), heavy_boots.clone(), wool_jacket.clone()];
+        let inventory = Inventory {
+            items: starting_items,
+            capacity: 20,
+            weight_limit: 25.0,
+            current_weight: ice_axe.weight + heavy_boots.weight + wool_jacket.weight,
+        };
+        
+        // Create equipped items with axe and boots equipped
+        let mut equipped = EquippedItems::new();
+        equipped.axe = Some(ice_axe);
+        equipped.boots = Some(heavy_boots);
+        equipped.jacket = Some(wool_jacket);
+        
+        // Add components to player
+        commands.entity(player_entity).insert((inventory, equipped));
+        
+        info!("🎒 Starting equipment loaded: Ice Axe (+15% climb), Heavy Boots (+10% climb, +20 warmth), Wool Jacket (+30 warmth)");
+    }
+}
+
+pub fn inventory_input_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut next_state: ResMut<NextState<GameState>>,
+    current_state: Res<State<GameState>>,
+) {
+    if keyboard_input.just_pressed(KeyCode::KeyI) {
+        match current_state.get() {
+            GameState::Climbing => {
+                next_state.set(GameState::Inventory);
+                info!("📦 Opening inventory...");
+            }
+            GameState::Inventory => {
+                next_state.set(GameState::Climbing);
+                info!("📦 Closing inventory...");
+            }
+            _ => {}
+        }
+    }
+}
+
+pub fn setup_inventory_ui(mut commands: Commands) {
+    // Main inventory container
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    width: Val::Percent(80.0),
+                    height: Val::Percent(70.0),
+                    position_type: PositionType::Absolute,
+                    left: Val::Percent(10.0),
+                    top: Val::Percent(15.0),
+                    flex_direction: FlexDirection::Row,
+                    border: UiRect::all(Val::Px(3.0)),
+                    padding: UiRect::all(Val::Px(20.0)),
+                    ..default()
+                },
+                background_color: Color::srgba(0.1, 0.1, 0.1, 0.9).into(),
+                border_color: Color::srgb(0.6, 0.6, 0.6).into(),
+                ..default()
+            },
+            InventoryUI,
+        ))
+        .with_children(|parent| {
+            // Equipment panel (left side)
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(40.0),
+                        height: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        margin: UiRect::right(Val::Px(20.0)),
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.2, 0.2, 0.3, 0.8).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // Equipment title
+                    parent.spawn(TextBundle::from_section(
+                        "EQUIPPED",
+                        TextStyle {
+                            font_size: 24.0,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                    ));
+                    
+                    // Equipment slots
+                    let equipment_slots = vec![
+                        ("🪓 Axe", EquipmentSlotType::Axe),
+                        ("👢 Boots", EquipmentSlotType::Boots),
+                        ("🧥 Jacket", EquipmentSlotType::Jacket),
+                        ("🧤 Gloves", EquipmentSlotType::Gloves),
+                        ("🎒 Backpack", EquipmentSlotType::Backpack),
+                    ];
+                    
+                    for (label, slot_type) in equipment_slots {
+                        parent
+                            .spawn((
+                                NodeBundle {
+                                    style: Style {
+                                        width: Val::Percent(100.0),
+                                        height: Val::Px(60.0),
+                                        margin: UiRect::all(Val::Px(5.0)),
+                                        border: UiRect::all(Val::Px(2.0)),
+                                        padding: UiRect::all(Val::Px(10.0)),
+                                        align_items: AlignItems::Center,
+                                        ..default()
+                                    },
+                                    background_color: Color::srgba(0.3, 0.3, 0.4, 0.8).into(),
+                                    border_color: Color::srgb(0.5, 0.5, 0.5).into(),
+                                    ..default()
+                                },
+                                EquipmentSlot { slot_type },
+                            ))
+                            .with_children(|parent| {
+                                parent.spawn(TextBundle::from_section(
+                                    format!("{}: Empty", label),
+                                    TextStyle {
+                                        font_size: 16.0,
+                                        color: Color::WHITE,
+                                        ..default()
+                                    },
+                                ));
+                            });
+                    }
+                });
+
+            // Inventory panel (right side)
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(60.0),
+                        height: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.2, 0.3, 0.2, 0.8).into(),
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // Inventory title
+                    parent.spawn(TextBundle::from_section(
+                        "INVENTORY",
+                        TextStyle {
+                            font_size: 24.0,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                    ));
+                    
+                    // Inventory grid
+                    parent
+                        .spawn(NodeBundle {
+                            style: Style {
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(80.0),
+                                flex_direction: FlexDirection::Column,
+                                flex_wrap: FlexWrap::Wrap,
+                                ..default()
+                            },
+                            ..default()
+                        })
+                        .with_children(|parent| {
+                            // Create inventory slots
+                            for i in 0..20 {
+                                parent
+                                    .spawn((
+                                        NodeBundle {
+                                            style: Style {
+                                                width: Val::Px(80.0),
+                                                height: Val::Px(80.0),
+                                                margin: UiRect::all(Val::Px(2.0)),
+                                                border: UiRect::all(Val::Px(1.0)),
+                                                padding: UiRect::all(Val::Px(5.0)),
+                                                align_items: AlignItems::Center,
+                                                justify_content: JustifyContent::Center,
+                                                ..default()
+                                            },
+                                            background_color: Color::srgba(0.4, 0.4, 0.4, 0.6).into(),
+                                            border_color: Color::srgb(0.6, 0.6, 0.6).into(),
+                                            ..default()
+                                        },
+                                        InventorySlot { slot_index: i },
+                                    ))
+                                    .with_children(|parent| {
+                                        parent.spawn(TextBundle::from_section(
+                                            "",
+                                            TextStyle {
+                                                font_size: 12.0,
+                                                color: Color::WHITE,
+                                                ..default()
+                                            },
+                                        ));
+                                    });
+                            }
+                        });
+                    
+                    // Stats panel
+                    parent.spawn(TextBundle::from_section(
+                        "Weight: 0/25 kg",
+                        TextStyle {
+                            font_size: 16.0,
+                            color: Color::YELLOW,
+                            ..default()
+                        },
+                    ));
+                });
+        });
+}
+
+pub fn update_inventory_ui(
+    player_query: Query<(&Inventory, &EquippedItems), With<Player>>,
+    mut equipment_query: Query<&mut Text, (With<EquipmentSlot>, Without<InventorySlot>)>,
+    mut inventory_query: Query<&mut Text, (With<InventorySlot>, Without<EquipmentSlot>)>,
+    equipment_slots: Query<&EquipmentSlot>,
+    inventory_slots: Query<&InventorySlot>,
+) {
+    if let Ok((inventory, equipped)) = player_query.get_single() {
+        // Update equipment slots
+        for (mut text, equipment_slot) in equipment_query.iter_mut().zip(equipment_slots.iter()) {
+            let item_text = match &equipment_slot.slot_type {
+                EquipmentSlotType::Axe => {
+                    if let Some(axe) = &equipped.axe {
+                        format!("🪓 {}", axe.name)
+                    } else {
+                        "🪓 Axe: Empty".to_string()
+                    }
+                }
+                EquipmentSlotType::Boots => {
+                    if let Some(boots) = &equipped.boots {
+                        format!("👢 {}", boots.name)
+                    } else {
+                        "👢 Boots: Empty".to_string()
+                    }
+                }
+                EquipmentSlotType::Jacket => {
+                    if let Some(jacket) = &equipped.jacket {
+                        format!("🧥 {}", jacket.name)
+                    } else {
+                        "🧥 Jacket: Empty".to_string()
+                    }
+                }
+                EquipmentSlotType::Gloves => {
+                    if let Some(gloves) = &equipped.gloves {
+                        format!("🧤 {}", gloves.name)
+                    } else {
+                        "🧤 Gloves: Empty".to_string()
+                    }
+                }
+                EquipmentSlotType::Backpack => {
+                    if let Some(backpack) = &equipped.backpack {
+                        format!("🎒 {}", backpack.name)
+                    } else {
+                        "🎒 Backpack: Empty".to_string()
+                    }
+                }
+            };
+            
+            if let Some(section) = text.sections.first_mut() {
+                section.value = item_text;
+            }
+        }
+        
+        // Update inventory slots
+        for (mut text, inventory_slot) in inventory_query.iter_mut().zip(inventory_slots.iter()) {
+            let item_text = if inventory_slot.slot_index < inventory.items.len() {
+                let item = &inventory.items[inventory_slot.slot_index];
+                match item.item_type {
+                    ItemType::ClimbingGear => format!("🪓\n{}", item.name),
+                    ItemType::Clothing => format!("👕\n{}", item.name),
+                    ItemType::Tool => format!("🔧\n{}", item.name),
+                    ItemType::Food => format!("🍖\n{}", item.name),
+                    _ => item.name.clone(),
+                }
+            } else {
+                "".to_string()
+            };
+            
+            if let Some(section) = text.sections.first_mut() {
+                section.value = item_text;
+            }
+        }
+    }
+}
+
+pub fn cleanup_inventory_ui(mut commands: Commands, inventory_ui_query: Query<Entity, With<InventoryUI>>) {
+    for entity in inventory_ui_query.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+}
+
+pub fn apply_equipment_bonuses(
+    mut player_query: Query<(&mut MovementStats, &EquippedItems), With<Player>>,
+) {
+    for (mut movement_stats, equipped) in player_query.iter_mut() {
+        // Base climbing skill
+        let base_skill = 1.0;
+        
+        // Apply equipment bonuses
+        let equipment_bonus = equipped.get_climbing_bonus() / 100.0; // Convert percentage to decimal
+        
+        // Update climbing skill with equipment bonus
+        movement_stats.climbing_skill = base_skill + equipment_bonus;
+        
+        // You could also modify movement speed based on boots, etc.
+        // movement_stats.speed = base_speed * boot_modifier;
+    }
+}

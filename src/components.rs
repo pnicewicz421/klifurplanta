@@ -122,6 +122,52 @@ pub struct ItemProperties {
     pub protection: Option<f32>,
 }
 
+#[derive(Component)]
+pub struct EquippedItems {
+    pub axe: Option<Item>,
+    pub boots: Option<Item>,
+    pub jacket: Option<Item>,
+    pub gloves: Option<Item>,
+    pub backpack: Option<Item>,
+}
+
+impl EquippedItems {
+    pub fn new() -> Self {
+        Self {
+            axe: None,
+            boots: None,
+            jacket: None,
+            gloves: None,
+            backpack: None,
+        }
+    }
+    
+    pub fn get_total_warmth(&self) -> f32 {
+        let mut warmth = 0.0;
+        if let Some(boots) = &self.boots {
+            warmth += boots.properties.warmth.unwrap_or(0.0);
+        }
+        if let Some(jacket) = &self.jacket {
+            warmth += jacket.properties.warmth.unwrap_or(0.0);
+        }
+        if let Some(gloves) = &self.gloves {
+            warmth += gloves.properties.warmth.unwrap_or(0.0);
+        }
+        warmth
+    }
+    
+    pub fn get_climbing_bonus(&self) -> f32 {
+        let mut bonus = 0.0;
+        if let Some(axe) = &self.axe {
+            bonus += axe.properties.strength.unwrap_or(0.0);
+        }
+        if let Some(boots) = &self.boots {
+            bonus += boots.properties.strength.unwrap_or(0.0);
+        }
+        bonus
+    }
+}
+
 // ===== TERRAIN & ENVIRONMENT =====
 
 #[derive(Component)]
@@ -321,3 +367,27 @@ pub struct HealthBarFill;
 
 #[derive(Component)]
 pub struct StaminaBarFill;
+
+// ===== INVENTORY UI COMPONENTS =====
+
+#[derive(Component)]
+pub struct InventoryUI;
+
+#[derive(Component)]
+pub struct InventorySlot {
+    pub slot_index: usize,
+}
+
+#[derive(Component)]
+pub struct EquipmentSlot {
+    pub slot_type: EquipmentSlotType,
+}
+
+#[derive(Clone, Debug)]
+pub enum EquipmentSlotType {
+    Axe,
+    Boots,
+    Jacket,
+    Gloves,
+    Backpack,
+}
