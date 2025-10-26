@@ -1053,7 +1053,7 @@ pub fn setup_inventory_ui(mut commands: Commands) {
                         "Weight: 0/25 kg",
                         TextStyle {
                             font_size: 16.0,
-                            color: Color::YELLOW,
+                            color: Color::srgb(1.0, 1.0, 0.0), // Yellow
                             ..default()
                         },
                     ));
