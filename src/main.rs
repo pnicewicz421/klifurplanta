@@ -17,7 +17,15 @@ fn main() {
         .init_state::<GameState>()
         .add_systems(
             Startup, 
-            (setup, setup_ui, load_terrain_from_level, setup_starting_equipment)
+            (
+                setup,
+                setup_ui,
+                load_terrain_from_level,
+            )
+        )
+        .add_systems(
+            PostStartup,
+            setup_starting_equipment
         )
         .add_systems(
             Update,
@@ -38,7 +46,7 @@ fn main() {
         .add_systems(OnExit(GameState::Inventory), cleanup_inventory_ui)
         .add_systems(
             Update,
-            (update_inventory_ui,).run_if(in_state(GameState::Inventory)),
+            (update_inventory_ui, close_button_system).run_if(in_state(GameState::Inventory)),
         )
         .run();
 }

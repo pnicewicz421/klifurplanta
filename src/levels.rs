@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use crate::components::*;
-use crate::resources::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LevelDefinition {
@@ -129,7 +128,7 @@ impl LevelDefinition {
 
             commands.spawn((
                 Transform::from_translation(Vec3::new(npc_spawn.position.0, npc_spawn.position.1, 1.0)),
-                NPC {
+                Npc {
                     name: npc_spawn.name.clone(),
                     npc_type,
                     dialogue_tree: npc_spawn.dialogue_file.clone(),
@@ -158,6 +157,7 @@ pub fn create_tutorial_level() -> LevelDefinition {
     }; width]; height];
 
     // Create a simple climbing route
+    #[allow(clippy::needless_range_loop)]
     for y in 5..12 {
         for x in 8..12 {
             terrain[y][x] = TerrainData {
@@ -235,6 +235,7 @@ pub fn create_iceland_glacier_level() -> LevelDefinition {
     }; width]; height];
 
     // Create glacier (jökull) terrain
+    #[allow(clippy::needless_range_loop)]
     for y in 10..20 {
         for x in 5..25 {
             terrain[y][x] = TerrainData {

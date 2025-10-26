@@ -262,19 +262,5 @@ impl Party {
     }
 }
 
-// Default implementations for ItemProperties
-impl Default for ItemProperties {
-    fn default() -> Self {
-        Self {
-            warmth: None,
-            strength: None,
-            magic_power: None,
-            nutrition: None,
-            water: None,
-            protection: None,
-        }
-    }
-}
-
 // Import Weather from states
 use crate::states::Weather;

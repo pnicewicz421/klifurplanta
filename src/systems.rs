@@ -3,6 +3,10 @@ use crate::components::*;
 use crate::resources::*;
 use crate::states::*;
 
+// Type aliases to fix clippy::type_complexity warnings
+type TerrainQuery<'w, 's> = Query<'w, 's, (&'static Transform, &'static TerrainTile), (With<TerrainTile>, Without<Player>)>;
+type CloseButtonQuery<'w, 's> = Query<'w, 's, (&'static Interaction, &'static mut BackgroundColor), (Changed<Interaction>, With<CloseButton>)>;
+
 /// Stamina and health regeneration system with feedback
 pub fn stamina_regeneration_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
@@ -207,7 +211,7 @@ pub fn player_movement_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut player_query: Query<(&mut Transform, &mut MovementStats, &mut Health), With<Player>>,
-    terrain_query: Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    terrain_query: TerrainQuery,
 ) {
     for (mut player_transform, mut stats, mut health) in player_query.iter_mut() {
         let mut direction = Vec3::ZERO;
@@ -278,7 +282,7 @@ pub fn player_movement_system(
 /// Check if the player can move to a specific position (collision detection)
 fn can_move_to_position(
     position: Vec3,
-    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    terrain_query: &TerrainQuery,
 ) -> bool {
     let player_size = 16.0; // Half the player size for collision
     let tile_size = 16.0;   // Half the tile size
@@ -299,7 +303,7 @@ fn can_move_to_position(
 /// Calculate stamina cost based on terrain difficulty
 fn get_stamina_cost_for_terrain(
     position: Vec3,
-    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    terrain_query: &TerrainQuery,
     delta_time: f32,
 ) -> f32 {
     let detection_range = 20.0;
@@ -328,7 +332,7 @@ fn get_stamina_cost_for_terrain(
 fn apply_environmental_effects(
     health: &mut Health,
     position: Vec3,
-    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    terrain_query: &TerrainQuery,
     delta_time: f32,
 ) {
     let detection_range = 20.0;
@@ -380,7 +384,7 @@ fn apply_environmental_effects(
 /// Get movement speed modifier based on terrain at current position
 fn get_terrain_modifier_at_position(
     position: Vec3,
-    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    terrain_query: &TerrainQuery,
 ) -> f32 {
     let detection_range = 20.0; // How close to terrain center to apply modifier
     
@@ -537,7 +541,7 @@ pub fn climbing_movement_system(
 
 pub fn terrain_interaction_system(
     player_query: Query<&Transform, With<Player>>,
-    terrain_query: Query<&TerrainTile>,
+    _terrain_query: Query<&TerrainTile>,
     mut health_query: Query<&mut Health, With<Player>>,
 ) {
     // Basic terrain interaction - would be expanded with proper collision detection
@@ -641,7 +645,7 @@ pub fn health_system(
 pub fn conversation_system(
     keys: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
-    npc_query: Query<&NPC>,
+    npc_query: Query<&Npc>,
 ) {
     // Simple conversation system
     if keys.just_pressed(KeyCode::Space) {
@@ -798,7 +802,9 @@ pub fn update_health_stamina_ui(
 // ===== INVENTORY & EQUIPMENT SYSTEMS =====
 
 pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Entity, With<Player>>) {
-    for player_entity in player_query.iter() {
+    if let Ok(player_entity) = player_query.get_single() {
+        info!("🎒 Setting up starting equipment for player...");
+        
         // Create starting items
         let ice_axe = Item {
             id: "ice_axe_01".to_string(),
@@ -867,6 +873,8 @@ pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Enti
         commands.entity(player_entity).insert((inventory, equipped));
         
         info!("🎒 Starting equipment loaded: Ice Axe (+15% climb), Heavy Boots (+10% climb, +20 warmth), Wool Jacket (+30 warmth)");
+    } else {
+        warn!("⚠️ Could not find player entity to add starting equipment!");
     }
 }
 
@@ -875,6 +883,7 @@ pub fn inventory_input_system(
     mut next_state: ResMut<NextState<GameState>>,
     current_state: Res<State<GameState>>,
 ) {
+    // Handle I key toggle
     if keyboard_input.just_pressed(KeyCode::KeyI) {
         match current_state.get() {
             GameState::Climbing => {
@@ -886,6 +895,33 @@ pub fn inventory_input_system(
                 info!("📦 Closing inventory...");
             }
             _ => {}
+        }
+    }
+    
+    // Handle Escape key (only closes inventory)
+    if keyboard_input.just_pressed(KeyCode::Escape)
+        && current_state.get() == &GameState::Inventory {
+            next_state.set(GameState::Climbing);
+            info!("📦 Closing inventory with Escape...");
+        }
+}
+
+pub fn close_button_system(
+    mut interaction_query: CloseButtonQuery,
+    mut next_state: ResMut<NextState<GameState>>,
+) {
+    for (interaction, mut color) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                next_state.set(GameState::Climbing);
+                info!("📦 Closing inventory with button click...");
+            }
+            Interaction::Hovered => {
+                *color = Color::srgb(0.8, 0.3, 0.3).into(); // Lighter red on hover
+            }
+            Interaction::None => {
+                *color = Color::srgb(0.6, 0.2, 0.2).into(); // Original red
+            }
         }
     }
 }
@@ -901,7 +937,7 @@ pub fn setup_inventory_ui(mut commands: Commands) {
                     position_type: PositionType::Absolute,
                     left: Val::Percent(10.0),
                     top: Val::Percent(15.0),
-                    flex_direction: FlexDirection::Row,
+                    flex_direction: FlexDirection::Column,
                     border: UiRect::all(Val::Px(3.0)),
                     padding: UiRect::all(Val::Px(20.0)),
                     ..default()
@@ -913,6 +949,73 @@ pub fn setup_inventory_ui(mut commands: Commands) {
             InventoryUI,
         ))
         .with_children(|parent| {
+            // Title bar with close button
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        height: Val::Px(40.0),
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::Center,
+                        margin: UiRect::bottom(Val::Px(20.0)),
+                        ..default()
+                    },
+                    ..default()
+                })
+                .with_children(|parent| {
+                    // Title
+                    parent.spawn(TextBundle::from_section(
+                        "INVENTORY & EQUIPMENT",
+                        TextStyle {
+                            font_size: 28.0,
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                    ));
+                    
+                    // Close button
+                    parent
+                        .spawn((
+                            ButtonBundle {
+                                style: Style {
+                                    width: Val::Px(80.0),
+                                    height: Val::Px(35.0),
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                background_color: Color::srgb(0.6, 0.2, 0.2).into(),
+                                border_color: Color::srgb(0.8, 0.4, 0.4).into(),
+                                ..default()
+                            },
+                            CloseButton,
+                        ))
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle::from_section(
+                                "CLOSE",
+                                TextStyle {
+                                    font_size: 16.0,
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                            ));
+                        });
+                });
+
+            // Main content area
+            parent
+                .spawn(NodeBundle {
+                    style: Style {
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        flex_direction: FlexDirection::Row,
+                        ..default()
+                    },
+                    ..default()
+                })
+                .with_children(|parent| {
             // Equipment panel (left side)
             parent
                 .spawn(NodeBundle {
@@ -1058,79 +1161,68 @@ pub fn setup_inventory_ui(mut commands: Commands) {
                         },
                     ));
                 });
+            });
         });
 }
 
 pub fn update_inventory_ui(
     player_query: Query<(&Inventory, &EquippedItems), With<Player>>,
-    mut equipment_query: Query<&mut Text, (With<EquipmentSlot>, Without<InventorySlot>)>,
-    mut inventory_query: Query<&mut Text, (With<InventorySlot>, Without<EquipmentSlot>)>,
-    equipment_slots: Query<&EquipmentSlot>,
-    inventory_slots: Query<&InventorySlot>,
+    mut text_query: Query<&mut Text>,
+    equipment_slots_query: Query<Entity, With<EquipmentSlot>>,
+    _inventory_slots_query: Query<Entity, With<InventorySlot>>,
+    children_query: Query<&Children>,
 ) {
     if let Ok((inventory, equipped)) = player_query.get_single() {
-        // Update equipment slots
-        for (mut text, equipment_slot) in equipment_query.iter_mut().zip(equipment_slots.iter()) {
-            let item_text = match &equipment_slot.slot_type {
-                EquipmentSlotType::Axe => {
-                    if let Some(axe) = &equipped.axe {
-                        format!("🪓 {}", axe.name)
-                    } else {
-                        "🪓 Axe: Empty".to_string()
+        // Update equipment slots by checking each one and finding its text child
+        for equipment_entity in equipment_slots_query.iter() {
+            if let Ok(children) = children_query.get(equipment_entity) {
+                for child in children.iter() {
+                    if let Ok(mut text) = text_query.get_mut(*child) {
+                        // Find which type of slot this is by checking the current text
+                        let current_text = &text.sections[0].value;
+                        
+                        if current_text.contains("🪓") || current_text.contains("Axe") {
+                            text.sections[0].value = if let Some(axe) = &equipped.axe {
+                                format!("🪓 {}", axe.name)
+                            } else {
+                                "🪓 Axe: Empty".to_string()
+                            };
+                        } else if current_text.contains("👢") || current_text.contains("Boots") {
+                            text.sections[0].value = if let Some(boots) = &equipped.boots {
+                                format!("👢 {}", boots.name)
+                            } else {
+                                "👢 Boots: Empty".to_string()
+                            };
+                        } else if current_text.contains("🧥") || current_text.contains("Jacket") {
+                            text.sections[0].value = if let Some(jacket) = &equipped.jacket {
+                                format!("🧥 {}", jacket.name)
+                            } else {
+                                "🧥 Jacket: Empty".to_string()
+                            };
+                        } else if current_text.contains("🧤") || current_text.contains("Gloves") {
+                            text.sections[0].value = if let Some(gloves) = &equipped.gloves {
+                                format!("🧤 {}", gloves.name)
+                            } else {
+                                "🧤 Gloves: Empty".to_string()
+                            };
+                        } else if current_text.contains("🎒") || current_text.contains("Backpack") {
+                            text.sections[0].value = if let Some(backpack) = &equipped.backpack {
+                                format!("🎒 {}", backpack.name)
+                            } else {
+                                "🎒 Backpack: Empty".to_string()
+                            };
+                        }
+                        break;
                     }
                 }
-                EquipmentSlotType::Boots => {
-                    if let Some(boots) = &equipped.boots {
-                        format!("👢 {}", boots.name)
-                    } else {
-                        "👢 Boots: Empty".to_string()
-                    }
-                }
-                EquipmentSlotType::Jacket => {
-                    if let Some(jacket) = &equipped.jacket {
-                        format!("🧥 {}", jacket.name)
-                    } else {
-                        "🧥 Jacket: Empty".to_string()
-                    }
-                }
-                EquipmentSlotType::Gloves => {
-                    if let Some(gloves) = &equipped.gloves {
-                        format!("🧤 {}", gloves.name)
-                    } else {
-                        "🧤 Gloves: Empty".to_string()
-                    }
-                }
-                EquipmentSlotType::Backpack => {
-                    if let Some(backpack) = &equipped.backpack {
-                        format!("🎒 {}", backpack.name)
-                    } else {
-                        "🎒 Backpack: Empty".to_string()
-                    }
-                }
-            };
-            
-            if let Some(section) = text.sections.first_mut() {
-                section.value = item_text;
             }
         }
         
-        // Update inventory slots
-        for (mut text, inventory_slot) in inventory_query.iter_mut().zip(inventory_slots.iter()) {
-            let item_text = if inventory_slot.slot_index < inventory.items.len() {
-                let item = &inventory.items[inventory_slot.slot_index];
-                match item.item_type {
-                    ItemType::ClimbingGear => format!("🪓\n{}", item.name),
-                    ItemType::Clothing => format!("👕\n{}", item.name),
-                    ItemType::Tool => format!("🔧\n{}", item.name),
-                    ItemType::Food => format!("🍖\n{}", item.name),
-                    _ => item.name.clone(),
-                }
-            } else {
-                "".to_string()
-            };
-            
-            if let Some(section) = text.sections.first_mut() {
-                section.value = item_text;
+        // Update weight display
+        for mut text in text_query.iter_mut() {
+            if !text.sections.is_empty() && text.sections[0].value.contains("Weight:") {
+                text.sections[0].value = format!("Weight: {:.1}/{:.0} kg", inventory.current_weight, inventory.weight_limit);
+                break;
             }
         }
     }

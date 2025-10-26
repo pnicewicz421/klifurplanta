@@ -100,7 +100,7 @@ pub struct Item {
     pub properties: ItemProperties,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ItemType {
     ClimbingGear,
     Clothing,
@@ -112,7 +112,7 @@ pub enum ItemType {
     Misc,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
 pub struct ItemProperties {
     pub warmth: Option<f32>,
     pub strength: Option<f32>,
@@ -129,6 +129,12 @@ pub struct EquippedItems {
     pub jacket: Option<Item>,
     pub gloves: Option<Item>,
     pub backpack: Option<Item>,
+}
+
+impl Default for EquippedItems {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EquippedItems {
@@ -203,7 +209,7 @@ pub enum HazardType {
 // ===== NPCs & WILDLIFE =====
 
 #[derive(Component)]
-pub struct NPC {
+pub struct Npc {
     pub name: String,
     pub npc_type: NPCType,
     pub dialogue_tree: String, // Reference to dialogue file
@@ -382,6 +388,9 @@ pub struct InventorySlot {
 pub struct EquipmentSlot {
     pub slot_type: EquipmentSlotType,
 }
+
+#[derive(Component)]
+pub struct CloseButton;
 
 #[derive(Clone, Debug)]
 pub enum EquipmentSlotType {
