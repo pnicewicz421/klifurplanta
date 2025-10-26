@@ -238,7 +238,7 @@ pub fn create_iceland_glacier_level() -> LevelDefinition {
     for y in 10..20 {
         for x in 5..25 {
             terrain[y][x] = TerrainData {
-                terrain_type: TerrainType::Glacier,
+                terrain_type: TerrainType::Ice,
                 slope: 0.9,
                 stability: 0.5,
                 climbable: true,

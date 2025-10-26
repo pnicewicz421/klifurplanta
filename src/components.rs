@@ -1,7 +1,47 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
-// ===== CORE PLAYER COMPONENTS =====
+// ===== PHASE 2: TERRAIN COMPONENTS =====
+
+#[derive(Component)]
+pub struct Terrain {
+    pub terrain_type: TerrainType,
+    pub movement_modifier: f32, // Speed multiplier: 1.0 = normal, 0.5 = half speed, etc.
+    pub solid: bool, // Can player pass through?
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TerrainType {
+    Soil,    // Brown - normal movement
+    Ice,     // Light blue - slippery (faster)
+    Rock,    // Gray - slow movement
+    Grass,   // Green - normal movement
+    Snow,    // White - slow movement
+}
+
+impl TerrainType {
+    pub fn color(&self) -> Color {
+        match self {
+            TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2),    // Brown
+            TerrainType::Ice => Color::srgb(0.7, 0.9, 1.0),     // Light blue
+            TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5),    // Gray
+            TerrainType::Grass => Color::srgb(0.3, 0.7, 0.3),   // Green
+            TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9),    // White
+        }
+    }
+    
+    pub fn movement_modifier(&self) -> f32 {
+        match self {
+            TerrainType::Soil => 1.0,
+            TerrainType::Ice => 1.3,   // Slippery - faster
+            TerrainType::Rock => 0.6,  // Slow and difficult
+            TerrainType::Grass => 1.0,
+            TerrainType::Snow => 0.7,  // Slow in snow
+        }
+    }
+}
+
+// ===== EXISTING COMPONENTS =====
 
 #[derive(Component)]
 pub struct Player {
@@ -90,18 +130,6 @@ pub struct TerrainTile {
     pub slope: f32, // 0.0 = flat, 1.0 = vertical
     pub stability: f32, // How stable the terrain is
     pub climbable: bool,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum TerrainType {
-    Soil,
-    Rock,
-    Ice,
-    Snow,
-    Glacier,
-    Lava,
-    Water,
-    Vegetation,
 }
 
 #[derive(Component)]

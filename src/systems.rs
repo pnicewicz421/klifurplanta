@@ -3,6 +3,356 @@ use crate::components::*;
 use crate::resources::*;
 use crate::states::*;
 
+/// Stamina and health regeneration system
+pub fn stamina_regeneration_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mut player_query: Query<(&mut MovementStats, &mut Health), With<Player>>,
+) {
+    for (mut stats, mut health) in player_query.iter_mut() {
+        // Check if player is moving (any arrow key pressed)
+        let is_moving = keyboard_input.pressed(KeyCode::ArrowUp) ||
+                       keyboard_input.pressed(KeyCode::ArrowDown) ||
+                       keyboard_input.pressed(KeyCode::ArrowLeft) ||
+                       keyboard_input.pressed(KeyCode::ArrowRight);
+        
+        if !is_moving {
+            // Regenerate stamina when not moving
+            let stamina_regen_rate = 15.0; // Stamina per second when resting
+            stats.stamina = (stats.stamina + stamina_regen_rate * time.delta_seconds()).min(stats.max_stamina);
+            
+            // Slow health regeneration when resting (if not in harsh conditions)
+            let health_regen_rate = 2.0; // Health per second when resting
+            health.current = (health.current + health_regen_rate * time.delta_seconds()).min(health.max);
+        }
+        
+        // Death check
+        if health.current <= 0.0 {
+            error!("Player has died! Health reached zero.");
+            // In a real game, you'd transition to a death/game over state here
+        }
+    }
+}
+
+// ===== PHASE 2: TERRAIN LOADING FROM FILES =====
+
+/// System to load and spawn terrain from level files
+pub fn load_terrain_from_level(
+    mut commands: Commands,
+) {
+    // Load the tutorial level
+    let level_path = "levels/tutorial_01.ron";
+    
+    match crate::levels::LevelDefinition::load_from_file(level_path) {
+        Ok(level) => {
+            info!("Loading level: {}", level.name);
+            
+            // Spawn terrain tiles from level data
+            for (row_idx, row) in level.terrain.iter().enumerate() {
+                for (col_idx, terrain_data) in row.iter().enumerate() {
+                    let color = get_terrain_color(&terrain_data.terrain_type);
+                    
+                    commands.spawn((
+                        SpriteBundle {
+                            sprite: Sprite {
+                                color,
+                                custom_size: Some(Vec2::new(32.0, 32.0)),
+                                ..default()
+                            },
+                            transform: Transform::from_translation(Vec3::new(
+                                (col_idx as f32 - level.width as f32 / 2.0) * 32.0,
+                                (level.height as f32 / 2.0 - row_idx as f32) * 32.0,
+                                0.0,
+                            )),
+                            ..default()
+                        },
+                        TerrainTile {
+                            terrain_type: terrain_data.terrain_type.clone(),
+                            slope: terrain_data.slope,
+                            stability: terrain_data.stability,
+                            climbable: terrain_data.climbable,
+                        },
+                    ));
+                }
+            }
+            
+            info!("Terrain loaded from {}: {}x{} tiles", level_path, level.width, level.height);
+            info!("Terrain types: Brown=soil, Gray=rock, Blue=ice, Green=grass, White=snow");
+        }
+        Err(e) => {
+            error!("Failed to load level {}: {}", level_path, e);
+            // Fallback to simple terrain for testing
+            spawn_simple_fallback_terrain(&mut commands);
+        }
+    }
+}
+
+/// Helper function to get color for terrain type
+fn get_terrain_color(terrain_type: &TerrainType) -> Color {
+    match terrain_type {
+        TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2),     // Brown
+        TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5),     // Gray  
+        TerrainType::Ice => Color::srgb(0.6, 0.8, 1.0),      // Light blue
+        TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9),     // White
+        TerrainType::Grass => Color::srgb(0.2, 0.7, 0.2),    // Green
+    }
+}
+
+/// Fallback terrain spawning if level loading fails
+fn spawn_simple_fallback_terrain(commands: &mut Commands) {
+    warn!("Using fallback terrain generation");
+    
+    // Create a simple 10x8 grid
+    for x in -5..5 {
+        for y in -4..4 {
+            let terrain_type = if y < -2 {
+                TerrainType::Soil
+            } else if y < 0 {
+                TerrainType::Rock
+            } else {
+                TerrainType::Grass
+            };
+            
+            let color = get_terrain_color(&terrain_type);
+            
+            commands.spawn((
+                SpriteBundle {
+                    sprite: Sprite {
+                        color,
+                        custom_size: Some(Vec2::new(32.0, 32.0)),
+                        ..default()
+                    },
+                    transform: Transform::from_translation(Vec3::new(
+                        x as f32 * 32.0,
+                        y as f32 * 32.0,
+                        0.0,
+                    )),
+                    ..default()
+                },
+                TerrainTile {
+                    terrain_type: terrain_type.clone(),
+                    slope: 0.0,
+                    stability: 1.0,
+                    climbable: matches!(terrain_type, TerrainType::Grass),
+                },
+            ));
+        }
+    }
+}
+
+/// Camera follow system - smoothly follows the player
+pub fn camera_follow_system(
+    mut camera_query: Query<&mut Transform, (With<Camera>, Without<Player>)>,
+    player_query: Query<&Transform, (With<Player>, Without<Camera>)>,
+    time: Res<Time>,
+) {
+    if let (Ok(mut camera_transform), Ok(player_transform)) = 
+        (camera_query.get_single_mut(), player_query.get_single()) {
+        
+        let target_position = Vec3::new(
+            player_transform.translation.x,
+            player_transform.translation.y,
+            camera_transform.translation.z, // Keep camera's Z position
+        );
+        
+        // Smooth camera following with lerp
+        let follow_speed = 2.0;
+        camera_transform.translation = camera_transform.translation.lerp(
+            target_position,
+            follow_speed * time.delta_seconds(),
+        );
+    }
+}
+
+// ===== PHASE 1: BASIC PLAYER MOVEMENT =====
+
+/// Advanced player movement system with stamina consumption and health management
+pub fn player_movement_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    mut player_query: Query<(&mut Transform, &mut MovementStats, &mut Health), With<Player>>,
+    terrain_query: Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+) {
+    for (mut player_transform, mut stats, mut health) in player_query.iter_mut() {
+        let mut direction = Vec3::ZERO;
+
+        // Arrow key controls
+        if keyboard_input.pressed(KeyCode::ArrowUp) {
+            direction.y += 1.0;
+        }
+        if keyboard_input.pressed(KeyCode::ArrowDown) {
+            direction.y -= 1.0;
+        }
+        if keyboard_input.pressed(KeyCode::ArrowLeft) {
+            direction.x -= 1.0;
+        }
+        if keyboard_input.pressed(KeyCode::ArrowRight) {
+            direction.x += 1.0;
+        }
+
+        // Calculate movement with terrain-specific speed modifiers and stamina
+        if direction.length() > 0.0 {
+            // Check if player has enough stamina to move
+            if stats.stamina > 5.0 {
+                direction = direction.normalize();
+                
+                // Get terrain modifier for current position
+                let terrain_modifier = get_terrain_modifier_at_position(
+                    player_transform.translation, 
+                    &terrain_query
+                );
+                
+                // Calculate stamina cost based on terrain difficulty
+                let stamina_cost = get_stamina_cost_for_terrain(
+                    player_transform.translation,
+                    &terrain_query,
+                    time.delta_seconds()
+                );
+                
+                // Consume stamina
+                stats.stamina = (stats.stamina - stamina_cost).max(0.0);
+                
+                let movement = direction * stats.speed * terrain_modifier * time.delta_seconds();
+                let new_position = player_transform.translation + movement;
+                
+                // Check collision with solid terrain
+                if can_move_to_position(new_position, &terrain_query) {
+                    player_transform.translation = new_position;
+                }
+                
+                // Log stamina if getting low
+                if stats.stamina < 20.0 && stats.stamina > 0.0 {
+                    info!("Stamina low: {:.1}/100", stats.stamina);
+                }
+            } else {
+                info!("Too exhausted to move! Stamina: {:.1}/100", stats.stamina);
+            }
+        }
+        
+        // Health effects from environmental hazards
+        apply_environmental_effects(&mut health, player_transform.translation, &terrain_query, time.delta_seconds());
+    }
+}
+
+/// Check if the player can move to a specific position (collision detection)
+fn can_move_to_position(
+    position: Vec3,
+    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+) -> bool {
+    let player_size = 16.0; // Half the player size for collision
+    let tile_size = 16.0;   // Half the tile size
+    
+    for (terrain_transform, terrain_tile) in terrain_query.iter() {
+        // Only check collision with climbable terrain (non-climbable = solid walls)
+        if !terrain_tile.climbable {
+            // Simple AABB collision detection
+            let distance = position.distance(terrain_transform.translation);
+            if distance < (player_size + tile_size) {
+                return false; // Collision detected
+            }
+        }
+    }
+    true // No collision
+}
+
+/// Calculate stamina cost based on terrain difficulty
+fn get_stamina_cost_for_terrain(
+    position: Vec3,
+    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    delta_time: f32,
+) -> f32 {
+    let detection_range = 20.0;
+    let base_stamina_cost = 8.0; // Stamina per second while moving
+    
+    for (terrain_transform, terrain_tile) in terrain_query.iter() {
+        let distance = position.distance(terrain_transform.translation);
+        if distance < detection_range {
+            // Different terrain types cost different amounts of stamina
+            let terrain_multiplier = match terrain_tile.terrain_type {
+                TerrainType::Grass => 0.8,   // Easy terrain
+                TerrainType::Soil => 1.0,    // Normal stamina cost
+                TerrainType::Rock => 1.8,    // Very exhausting
+                TerrainType::Ice => 1.2,     // Slippery but requires concentration
+                TerrainType::Snow => 2.0,    // Most exhausting
+            };
+            
+            return base_stamina_cost * terrain_multiplier * delta_time;
+        }
+    }
+    
+    base_stamina_cost * delta_time // Default cost
+}
+
+/// Apply environmental effects to health
+fn apply_environmental_effects(
+    health: &mut Health,
+    position: Vec3,
+    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+    delta_time: f32,
+) {
+    let detection_range = 20.0;
+    
+    for (terrain_transform, terrain_tile) in terrain_query.iter() {
+        let distance = position.distance(terrain_transform.translation);
+        if distance < detection_range {
+            // Some terrain types can damage health over time
+            match terrain_tile.terrain_type {
+                TerrainType::Ice => {
+                    // Ice can cause minor health loss from cold
+                    let cold_damage = 1.0 * delta_time;
+                    health.current = (health.current - cold_damage).max(0.0);
+                    if health.current < 50.0 {
+                        info!("Feeling cold on ice! Health: {:.1}/100", health.current);
+                    }
+                }
+                TerrainType::Snow => {
+                    // Snow is even colder
+                    let cold_damage = 2.0 * delta_time;
+                    health.current = (health.current - cold_damage).max(0.0);
+                    if health.current < 50.0 {
+                        info!("Freezing in snow! Health: {:.1}/100", health.current);
+                    }
+                }
+                _ => {
+                    // Other terrain types don't damage health
+                }
+            }
+            break;
+        }
+    }
+}
+
+/// Get movement speed modifier based on terrain at current position
+fn get_terrain_modifier_at_position(
+    position: Vec3,
+    terrain_query: &Query<(&Transform, &TerrainTile), (With<TerrainTile>, Without<Player>)>,
+) -> f32 {
+    let detection_range = 20.0; // How close to terrain center to apply modifier
+    
+    for (terrain_transform, terrain_tile) in terrain_query.iter() {
+        let distance = position.distance(terrain_transform.translation);
+        if distance < detection_range {
+            // Apply terrain-specific movement modifiers
+            return match terrain_tile.terrain_type {
+                TerrainType::Soil => 1.0,      // Normal speed
+                TerrainType::Grass => 1.1,     // Slightly faster on grass
+                TerrainType::Rock => 0.7,      // Slower on rock
+                TerrainType::Ice => 1.4,       // Faster/slippery on ice
+                TerrainType::Snow => 0.6,      // Much slower in snow
+            };
+        }
+    }
+    1.0 // Default speed if not on any specific terrain
+}
+
+/// Simple time update system (renamed from time_system)
+pub fn update_time(
+    time: Res<Time>,
+    mut game_time: ResMut<GameTime>,
+) {
+    game_time.update(time.delta_seconds());
+}
+
 // ===== CORE SYSTEMS =====
 
 pub fn time_system(
