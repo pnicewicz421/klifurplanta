@@ -18,10 +18,10 @@ pub enum GameState {
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum ClimbingState {
     #[default]
-    Planning,    // Looking at the route, planning next moves
-    Moving,      // Actively climbing/moving
-    Resting,     // Taking a break on a ledge
-    Emergency,   // Dealing with hazards, falling, etc.
+    Planning, // Looking at the route, planning next moves
+    Moving,    // Actively climbing/moving
+    Resting,   // Taking a break on a ledge
+    Emergency, // Dealing with hazards, falling, etc.
 }
 
 #[derive(States, Debug, Clone, PartialEq, Eq, Hash, Default)]

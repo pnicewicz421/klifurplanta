@@ -7,36 +7,36 @@ use serde::{Deserialize, Serialize};
 pub struct Terrain {
     pub terrain_type: TerrainType,
     pub movement_modifier: f32, // Speed multiplier: 1.0 = normal, 0.5 = half speed, etc.
-    pub solid: bool, // Can player pass through?
+    pub solid: bool,            // Can player pass through?
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TerrainType {
-    Soil,    // Brown - normal movement
-    Ice,     // Light blue - slippery (faster)
-    Rock,    // Gray - slow movement
-    Grass,   // Green - normal movement
-    Snow,    // White - slow movement
+    Soil,  // Brown - normal movement
+    Ice,   // Light blue - slippery (faster)
+    Rock,  // Gray - slow movement
+    Grass, // Green - normal movement
+    Snow,  // White - slow movement
 }
 
 impl TerrainType {
     pub fn color(&self) -> Color {
         match self {
-            TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2),    // Brown
-            TerrainType::Ice => Color::srgb(0.7, 0.9, 1.0),     // Light blue
-            TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5),    // Gray
-            TerrainType::Grass => Color::srgb(0.3, 0.7, 0.3),   // Green
-            TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9),    // White
+            TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2), // Brown
+            TerrainType::Ice => Color::srgb(0.7, 0.9, 1.0),  // Light blue
+            TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5), // Gray
+            TerrainType::Grass => Color::srgb(0.3, 0.7, 0.3), // Green
+            TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9), // White
         }
     }
-    
+
     pub fn movement_modifier(&self) -> f32 {
         match self {
             TerrainType::Soil => 1.0,
-            TerrainType::Ice => 1.3,   // Slippery - faster
-            TerrainType::Rock => 0.6,  // Slow and difficult
+            TerrainType::Ice => 1.3,  // Slippery - faster
+            TerrainType::Rock => 0.6, // Slow and difficult
             TerrainType::Grass => 1.0,
-            TerrainType::Snow => 0.7,  // Slow in snow
+            TerrainType::Snow => 0.7, // Slow in snow
         }
     }
 }
@@ -147,7 +147,7 @@ impl EquippedItems {
             backpack: None,
         }
     }
-    
+
     pub fn get_total_warmth(&self) -> f32 {
         let mut warmth = 0.0;
         if let Some(boots) = &self.boots {
@@ -161,7 +161,7 @@ impl EquippedItems {
         }
         warmth
     }
-    
+
     pub fn get_climbing_bonus(&self) -> f32 {
         let mut bonus = 0.0;
         if let Some(axe) = &self.axe {
@@ -179,7 +179,7 @@ impl EquippedItems {
 #[derive(Component)]
 pub struct TerrainTile {
     pub terrain_type: TerrainType,
-    pub slope: f32, // 0.0 = flat, 1.0 = vertical
+    pub slope: f32,     // 0.0 = flat, 1.0 = vertical
     pub stability: f32, // How stable the terrain is
     pub climbable: bool,
 }

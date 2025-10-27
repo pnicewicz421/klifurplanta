@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use crate::components::*;
+use bevy::prelude::*;
 use std::collections::HashMap;
 
 // ===== TIME & WORLD STATE =====
@@ -28,7 +28,7 @@ impl GameTime {
         self.real_seconds_elapsed += delta_seconds;
         let hours_passed = delta_seconds * self.hours_per_real_second;
         self.game_hours_elapsed += hours_passed;
-        
+
         let total_hours = (self.game_hours_elapsed + 8.0) as u32; // Start at 8 AM
         self.day = (total_hours / 24) + 1;
         self.hour = (total_hours % 24) as u8;
@@ -44,11 +44,11 @@ impl GameTime {
 
     pub fn light_level(&self) -> f32 {
         match self.hour {
-            0..=5 => 0.1,    // Deep night
-            6..=7 => 0.3,    // Dawn
-            8..=17 => 1.0,   // Full day
-            18..=19 => 0.7,  // Evening
-            20..=23 => 0.2,  // Night
+            0..=5 => 0.1,   // Deep night
+            6..=7 => 0.3,   // Dawn
+            8..=17 => 1.0,  // Full day
+            18..=19 => 0.7, // Evening
+            20..=23 => 0.2, // Night
             _ => 0.1,
         }
     }
@@ -116,74 +116,86 @@ pub struct ShopItem {
 impl Default for ShopInventory {
     fn default() -> Self {
         let mut items = HashMap::new();
-        
+
         // Climbing gear
-        items.insert("rope".to_string(), ShopItem {
-            item: Item {
-                id: "rope".to_string(),
-                name: "Climbing Rope".to_string(),
-                weight: 2.0,
-                item_type: ItemType::ClimbingGear,
-                durability: Some(100.0),
-                properties: ItemProperties {
-                    strength: Some(50.0),
-                    ..Default::default()
+        items.insert(
+            "rope".to_string(),
+            ShopItem {
+                item: Item {
+                    id: "rope".to_string(),
+                    name: "Climbing Rope".to_string(),
+                    weight: 2.0,
+                    item_type: ItemType::ClimbingGear,
+                    durability: Some(100.0),
+                    properties: ItemProperties {
+                        strength: Some(50.0),
+                        ..Default::default()
+                    },
                 },
+                price: 45.0,
+                stock: Some(5),
             },
-            price: 45.0,
-            stock: Some(5),
-        });
+        );
 
-        items.insert("tent".to_string(), ShopItem {
-            item: Item {
-                id: "tent".to_string(),
-                name: "Weather Tent".to_string(),
-                weight: 3.5,
-                item_type: ItemType::Shelter,
-                durability: Some(80.0),
-                properties: ItemProperties {
-                    protection: Some(30.0),
-                    warmth: Some(25.0),
-                    ..Default::default()
+        items.insert(
+            "tent".to_string(),
+            ShopItem {
+                item: Item {
+                    id: "tent".to_string(),
+                    name: "Weather Tent".to_string(),
+                    weight: 3.5,
+                    item_type: ItemType::Shelter,
+                    durability: Some(80.0),
+                    properties: ItemProperties {
+                        protection: Some(30.0),
+                        warmth: Some(25.0),
+                        ..Default::default()
+                    },
                 },
+                price: 70.0,
+                stock: Some(3),
             },
-            price: 70.0,
-            stock: Some(3),
-        });
+        );
 
-        items.insert("jacket".to_string(), ShopItem {
-            item: Item {
-                id: "jacket".to_string(),
-                name: "Heavy Weather Jacket".to_string(),
-                weight: 1.2,
-                item_type: ItemType::Clothing,
-                durability: Some(90.0),
-                properties: ItemProperties {
-                    warmth: Some(40.0),
-                    protection: Some(15.0),
-                    ..Default::default()
+        items.insert(
+            "jacket".to_string(),
+            ShopItem {
+                item: Item {
+                    id: "jacket".to_string(),
+                    name: "Heavy Weather Jacket".to_string(),
+                    weight: 1.2,
+                    item_type: ItemType::Clothing,
+                    durability: Some(90.0),
+                    properties: ItemProperties {
+                        warmth: Some(40.0),
+                        protection: Some(15.0),
+                        ..Default::default()
+                    },
                 },
+                price: 85.0,
+                stock: Some(4),
             },
-            price: 85.0,
-            stock: Some(4),
-        });
+        );
 
-        items.insert("harness".to_string(), ShopItem {
-            item: Item {
-                id: "harness".to_string(),
-                name: "Climbing Harness".to_string(),
-                weight: 0.8,
-                item_type: ItemType::ClimbingGear,
-                durability: Some(95.0),
-                properties: ItemProperties {
-                    strength: Some(35.0),
-                    protection: Some(20.0),
-                    ..Default::default()
+        items.insert(
+            "harness".to_string(),
+            ShopItem {
+                item: Item {
+                    id: "harness".to_string(),
+                    name: "Climbing Harness".to_string(),
+                    weight: 0.8,
+                    item_type: ItemType::ClimbingGear,
+                    durability: Some(95.0),
+                    properties: ItemProperties {
+                        strength: Some(35.0),
+                        protection: Some(20.0),
+                        ..Default::default()
+                    },
                 },
+                price: 55.0,
+                stock: Some(6),
             },
-            price: 55.0,
-            stock: Some(6),
-        });
+        );
 
         Self { items }
     }

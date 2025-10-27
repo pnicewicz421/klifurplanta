@@ -1,11 +1,17 @@
-use bevy::prelude::*;
 use crate::components::*;
 use crate::resources::*;
 use crate::states::*;
+use bevy::prelude::*;
 
 // Type aliases to fix clippy::type_complexity warnings
-type TerrainQuery<'w, 's> = Query<'w, 's, (&'static Transform, &'static TerrainTile), (With<TerrainTile>, Without<Player>)>;
-type CloseButtonQuery<'w, 's> = Query<'w, 's, (&'static Interaction, &'static mut BackgroundColor), (Changed<Interaction>, With<CloseButton>)>;
+type TerrainQuery<'w, 's> =
+    Query<'w, 's, (&'static Transform, &'static TerrainTile), (With<TerrainTile>, Without<Player>)>;
+type CloseButtonQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static Interaction, &'static mut BackgroundColor),
+    (Changed<Interaction>, With<CloseButton>),
+>;
 
 /// Stamina and health regeneration system with feedback
 pub fn stamina_regeneration_system(
@@ -16,36 +22,41 @@ pub fn stamina_regeneration_system(
 ) {
     for (mut stats, mut health) in player_query.iter_mut() {
         // Check if player is moving (any arrow key pressed)
-        let is_moving = keyboard_input.pressed(KeyCode::ArrowUp) ||
-                       keyboard_input.pressed(KeyCode::ArrowDown) ||
-                       keyboard_input.pressed(KeyCode::ArrowLeft) ||
-                       keyboard_input.pressed(KeyCode::ArrowRight);
-        
+        let is_moving = keyboard_input.pressed(KeyCode::ArrowUp)
+            || keyboard_input.pressed(KeyCode::ArrowDown)
+            || keyboard_input.pressed(KeyCode::ArrowLeft)
+            || keyboard_input.pressed(KeyCode::ArrowRight);
+
         if !is_moving {
             let old_stamina = stats.stamina;
             let old_health = health.current;
-            
+
             // Regenerate stamina when not moving
             let stamina_regen_rate = 15.0; // Stamina per second when resting
-            stats.stamina = (stats.stamina + stamina_regen_rate * time.delta_seconds()).min(stats.max_stamina);
-            
+            stats.stamina =
+                (stats.stamina + stamina_regen_rate * time.delta_seconds()).min(stats.max_stamina);
+
             // Slow health regeneration when resting (if not in harsh conditions)
             let health_regen_rate = 2.0; // Health per second when resting
-            health.current = (health.current + health_regen_rate * time.delta_seconds()).min(health.max);
-            
+            health.current =
+                (health.current + health_regen_rate * time.delta_seconds()).min(health.max);
+
             // Log regeneration periodically (every 3 seconds)
             *last_regen_log += time.delta_seconds();
             if *last_regen_log >= 3.0 {
                 *last_regen_log = 0.0;
                 if stats.stamina < stats.max_stamina || health.current < health.max {
-                    info!("💚 Resting... Stamina: {:.1}/100 (+{:.1}), Health: {:.1}/100 (+{:.1})", 
-                        stats.stamina, stats.stamina - old_stamina,
-                        health.current, health.current - old_health
+                    info!(
+                        "💚 Resting... Stamina: {:.1}/100 (+{:.1}), Health: {:.1}/100 (+{:.1})",
+                        stats.stamina,
+                        stats.stamina - old_stamina,
+                        health.current,
+                        health.current - old_health
                     );
                 }
             }
         }
-        
+
         // Death check
         if health.current <= 0.0 {
             error!("💀 Player has died! Health reached zero.");
@@ -57,21 +68,19 @@ pub fn stamina_regeneration_system(
 // ===== PHASE 2: TERRAIN LOADING FROM FILES =====
 
 /// System to load and spawn terrain from level files
-pub fn load_terrain_from_level(
-    mut commands: Commands,
-) {
+pub fn load_terrain_from_level(mut commands: Commands) {
     // Load the tutorial level
     let level_path = "levels/tutorial_01.ron";
-    
+
     match crate::levels::LevelDefinition::load_from_file(level_path) {
         Ok(level) => {
             info!("Loading level: {}", level.name);
-            
+
             // Spawn terrain tiles from level data
             for (row_idx, row) in level.terrain.iter().enumerate() {
                 for (col_idx, terrain_data) in row.iter().enumerate() {
                     let color = get_terrain_color(&terrain_data.terrain_type);
-                    
+
                     commands.spawn((
                         SpriteBundle {
                             sprite: Sprite {
@@ -95,8 +104,11 @@ pub fn load_terrain_from_level(
                     ));
                 }
             }
-            
-            info!("Terrain loaded from {}: {}x{} tiles", level_path, level.width, level.height);
+
+            info!(
+                "Terrain loaded from {}: {}x{} tiles",
+                level_path, level.width, level.height
+            );
             info!("Terrain types: Brown=soil, Gray=rock, Blue=ice, Green=grass, White=snow");
         }
         Err(e) => {
@@ -110,18 +122,18 @@ pub fn load_terrain_from_level(
 /// Helper function to get color for terrain type
 fn get_terrain_color(terrain_type: &TerrainType) -> Color {
     match terrain_type {
-        TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2),     // Brown
-        TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5),     // Gray  
-        TerrainType::Ice => Color::srgb(0.6, 0.8, 1.0),      // Light blue
-        TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9),     // White
-        TerrainType::Grass => Color::srgb(0.2, 0.7, 0.2),    // Green
+        TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2), // Brown
+        TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5), // Gray
+        TerrainType::Ice => Color::srgb(0.6, 0.8, 1.0),  // Light blue
+        TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9), // White
+        TerrainType::Grass => Color::srgb(0.2, 0.7, 0.2), // Green
     }
 }
 
 /// Fallback terrain spawning if level loading fails
 fn spawn_simple_fallback_terrain(commands: &mut Commands) {
     warn!("Using fallback terrain generation");
-    
+
     // Create a simple 10x8 grid
     for x in -5..5 {
         for y in -4..4 {
@@ -132,9 +144,9 @@ fn spawn_simple_fallback_terrain(commands: &mut Commands) {
             } else {
                 TerrainType::Grass
             };
-            
+
             let color = get_terrain_color(&terrain_type);
-            
+
             commands.spawn((
                 SpriteBundle {
                     sprite: Sprite {
@@ -166,21 +178,20 @@ pub fn camera_follow_system(
     player_query: Query<&Transform, (With<Player>, Without<Camera>)>,
     time: Res<Time>,
 ) {
-    if let (Ok(mut camera_transform), Ok(player_transform)) = 
-        (camera_query.get_single_mut(), player_query.get_single()) {
-        
+    if let (Ok(mut camera_transform), Ok(player_transform)) =
+        (camera_query.get_single_mut(), player_query.get_single())
+    {
         let target_position = Vec3::new(
             player_transform.translation.x,
             player_transform.translation.y,
             camera_transform.translation.z, // Keep camera's Z position
         );
-        
+
         // Smooth camera following with lerp
         let follow_speed = 2.0;
-        camera_transform.translation = camera_transform.translation.lerp(
-            target_position,
-            follow_speed * time.delta_seconds(),
-        );
+        camera_transform.translation = camera_transform
+            .translation
+            .lerp(target_position, follow_speed * time.delta_seconds());
     }
 }
 
@@ -196,11 +207,11 @@ pub fn health_stamina_display_system(
     *last_update += time.delta_seconds();
     if *last_update >= 2.0 {
         *last_update = 0.0;
-        
+
         for (stats, health) in player_query.iter() {
-            info!("📊 Health: {:.1}/{:.1} | Stamina: {:.1}/{:.1}", 
-                health.current, health.max, 
-                stats.stamina, stats.max_stamina
+            info!(
+                "📊 Health: {:.1}/{:.1} | Stamina: {:.1}/{:.1}",
+                health.current, health.max, stats.stamina, stats.max_stamina
             );
         }
     }
@@ -235,58 +246,64 @@ pub fn player_movement_system(
             // Check if player has enough stamina to move
             if stats.stamina > 5.0 {
                 direction = direction.normalize();
-                
+
                 // Get terrain modifier for current position
-                let terrain_modifier = get_terrain_modifier_at_position(
-                    player_transform.translation, 
-                    &terrain_query
-                );
-                
+                let terrain_modifier =
+                    get_terrain_modifier_at_position(player_transform.translation, &terrain_query);
+
                 // Calculate stamina cost based on terrain difficulty
                 let stamina_cost = get_stamina_cost_for_terrain(
                     player_transform.translation,
                     &terrain_query,
-                    time.delta_seconds()
+                    time.delta_seconds(),
                 );
-                
+
                 // Consume stamina
                 stats.stamina = (stats.stamina - stamina_cost).max(0.0);
-                
+
                 // Show stamina consumption in real-time
                 if stamina_cost > 0.0 {
-                    info!("🏃 Moving! Stamina: {:.1}/100 (-{:.1})", stats.stamina, stamina_cost);
+                    info!(
+                        "🏃 Moving! Stamina: {:.1}/100 (-{:.1})",
+                        stats.stamina, stamina_cost
+                    );
                 }
-                
+
                 let movement = direction * stats.speed * terrain_modifier * time.delta_seconds();
                 let new_position = player_transform.translation + movement;
-                
+
                 // Check collision with solid terrain
                 if can_move_to_position(new_position, &terrain_query) {
                     player_transform.translation = new_position;
                 }
-                
+
                 // Log stamina if getting low
                 if stats.stamina < 20.0 && stats.stamina > 0.0 {
                     warn!("⚠️ Stamina low: {:.1}/100", stats.stamina);
                 }
             } else {
-                warn!("❌ Too exhausted to move! Stamina: {:.1}/100 - Rest to recover!", stats.stamina);
+                warn!(
+                    "❌ Too exhausted to move! Stamina: {:.1}/100 - Rest to recover!",
+                    stats.stamina
+                );
             }
         }
-        
+
         // Health effects from environmental hazards
-        apply_environmental_effects(&mut health, player_transform.translation, &terrain_query, time.delta_seconds());
+        apply_environmental_effects(
+            &mut health,
+            player_transform.translation,
+            &terrain_query,
+            time.delta_seconds(),
+        );
     }
 }
 
 /// Check if the player can move to a specific position (collision detection)
-fn can_move_to_position(
-    position: Vec3,
-    terrain_query: &TerrainQuery,
-) -> bool {
+fn can_move_to_position(position: Vec3, terrain_query: &TerrainQuery) -> bool {
     let player_size = 16.0; // Half the player size for collision
-    let tile_size = 16.0;   // Half the tile size
-    
+    let tile_size = 16.0; // Half the tile size
+
     for (terrain_transform, terrain_tile) in terrain_query.iter() {
         // Only check collision with climbable terrain (non-climbable = solid walls)
         if !terrain_tile.climbable {
@@ -308,23 +325,23 @@ fn get_stamina_cost_for_terrain(
 ) -> f32 {
     let detection_range = 20.0;
     let base_stamina_cost = 8.0; // Stamina per second while moving
-    
+
     for (terrain_transform, terrain_tile) in terrain_query.iter() {
         let distance = position.distance(terrain_transform.translation);
         if distance < detection_range {
             // Different terrain types cost different amounts of stamina
             let terrain_multiplier = match terrain_tile.terrain_type {
-                TerrainType::Grass => 0.8,   // Easy terrain
-                TerrainType::Soil => 1.0,    // Normal stamina cost
-                TerrainType::Rock => 1.8,    // Very exhausting
-                TerrainType::Ice => 1.2,     // Slippery but requires concentration
-                TerrainType::Snow => 2.0,    // Most exhausting
+                TerrainType::Grass => 0.8, // Easy terrain
+                TerrainType::Soil => 1.0,  // Normal stamina cost
+                TerrainType::Rock => 1.8,  // Very exhausting
+                TerrainType::Ice => 1.2,   // Slippery but requires concentration
+                TerrainType::Snow => 2.0,  // Most exhausting
             };
-            
+
             return base_stamina_cost * terrain_multiplier * delta_time;
         }
     }
-    
+
     base_stamina_cost * delta_time // Default cost
 }
 
@@ -336,7 +353,7 @@ fn apply_environmental_effects(
     delta_time: f32,
 ) {
     let detection_range = 20.0;
-    
+
     for (terrain_transform, terrain_tile) in terrain_query.iter() {
         let distance = position.distance(terrain_transform.translation);
         if distance < detection_range {
@@ -348,8 +365,10 @@ fn apply_environmental_effects(
                     let old_health = health.current;
                     health.current = (health.current - cold_damage).max(0.0);
                     if health.current < old_health {
-                        warn!("🧊 Taking cold damage on ice! Health: {:.1}/100 (-{:.1})", 
-                            health.current, cold_damage);
+                        warn!(
+                            "🧊 Taking cold damage on ice! Health: {:.1}/100 (-{:.1})",
+                            health.current, cold_damage
+                        );
                     }
                 }
                 TerrainType::Snow => {
@@ -358,8 +377,10 @@ fn apply_environmental_effects(
                     let old_health = health.current;
                     health.current = (health.current - cold_damage).max(0.0);
                     if health.current < old_health {
-                        error!("❄️ Freezing in snow! Health: {:.1}/100 (-{:.1})", 
-                            health.current, cold_damage);
+                        error!(
+                            "❄️ Freezing in snow! Health: {:.1}/100 (-{:.1})",
+                            health.current, cold_damage
+                        );
                     }
                 }
                 TerrainType::Grass => {
@@ -368,8 +389,10 @@ fn apply_environmental_effects(
                     let old_health = health.current;
                     health.current = (health.current + healing).min(health.max);
                     if health.current > old_health && health.current < health.max {
-                        info!("🌱 Grass is healing you! Health: {:.1}/100 (+{:.1})", 
-                            health.current, healing);
+                        info!(
+                            "🌱 Grass is healing you! Health: {:.1}/100 (+{:.1})",
+                            health.current, healing
+                        );
                     }
                 }
                 _ => {
@@ -382,22 +405,19 @@ fn apply_environmental_effects(
 }
 
 /// Get movement speed modifier based on terrain at current position
-fn get_terrain_modifier_at_position(
-    position: Vec3,
-    terrain_query: &TerrainQuery,
-) -> f32 {
+fn get_terrain_modifier_at_position(position: Vec3, terrain_query: &TerrainQuery) -> f32 {
     let detection_range = 20.0; // How close to terrain center to apply modifier
-    
+
     for (terrain_transform, terrain_tile) in terrain_query.iter() {
         let distance = position.distance(terrain_transform.translation);
         if distance < detection_range {
             // Apply terrain-specific movement modifiers
             return match terrain_tile.terrain_type {
-                TerrainType::Soil => 1.0,      // Normal speed
-                TerrainType::Grass => 1.1,     // Slightly faster on grass
-                TerrainType::Rock => 0.7,      // Slower on rock
-                TerrainType::Ice => 1.4,       // Faster/slippery on ice
-                TerrainType::Snow => 0.6,      // Much slower in snow
+                TerrainType::Soil => 1.0,  // Normal speed
+                TerrainType::Grass => 1.1, // Slightly faster on grass
+                TerrainType::Rock => 0.7,  // Slower on rock
+                TerrainType::Ice => 1.4,   // Faster/slippery on ice
+                TerrainType::Snow => 0.6,  // Much slower in snow
             };
         }
     }
@@ -405,19 +425,13 @@ fn get_terrain_modifier_at_position(
 }
 
 /// Simple time update system (renamed from time_system)
-pub fn update_time(
-    time: Res<Time>,
-    mut game_time: ResMut<GameTime>,
-) {
+pub fn update_time(time: Res<Time>, mut game_time: ResMut<GameTime>) {
     game_time.update(time.delta_seconds());
 }
 
 // ===== CORE SYSTEMS =====
 
-pub fn time_system(
-    time: Res<Time>,
-    mut game_time: ResMut<GameTime>,
-) {
+pub fn time_system(time: Res<Time>, mut game_time: ResMut<GameTime>) {
     game_time.update(time.delta_seconds());
 }
 
@@ -429,16 +443,16 @@ pub fn input_system(
     // Global state transitions
     if keys.just_pressed(KeyCode::Escape) {
         match current_state.get() {
-            GameState::Menu => {},
+            GameState::Menu => {}
             _ => next_state.set(GameState::Menu),
         }
     }
-    
+
     if keys.just_pressed(KeyCode::KeyI) {
         match current_state.get() {
             GameState::Inventory => next_state.set(GameState::Climbing),
             GameState::Climbing => next_state.set(GameState::Inventory),
-            _ => {},
+            _ => {}
         }
     }
 }
@@ -463,7 +477,7 @@ pub fn shop_system(
             }
         }
     }
-    
+
     if keys.just_pressed(KeyCode::Digit2) {
         if let Some(tent_item) = shop.items.get("tent") {
             if inventory.money >= tent_item.price && inventory.can_add_item(&tent_item.item) {
@@ -475,22 +489,21 @@ pub fn shop_system(
             }
         }
     }
-    
+
     if keys.just_pressed(KeyCode::Enter) {
         next_state.set(GameState::Climbing);
         info!("Leaving shop, starting climb!");
     }
 }
 
-pub fn inventory_ui_system(
-    inventory: Res<PlayerInventory>,
-    game_time: Res<GameTime>,
-) {
+pub fn inventory_ui_system(inventory: Res<PlayerInventory>, game_time: Res<GameTime>) {
     // In a real game, this would update UI elements
     // For now, just log every few seconds
     if game_time.real_seconds_elapsed % 3.0 < 0.1 {
-        info!("Money: ${:.2}, Weight: {:.1}/{:.1} kg", 
-            inventory.money, inventory.current_weight, inventory.max_weight);
+        info!(
+            "Money: ${:.2}, Weight: {:.1}/{:.1} kg",
+            inventory.money, inventory.current_weight, inventory.max_weight
+        );
         info!("Items: {}", inventory.items.len());
     }
 }
@@ -504,7 +517,7 @@ pub fn climbing_movement_system(
 ) {
     for (mut transform, mut stats) in query.iter_mut() {
         let mut movement = Vec3::ZERO;
-        
+
         if keys.pressed(KeyCode::ArrowLeft) || keys.pressed(KeyCode::KeyA) {
             movement.x -= 1.0;
         }
@@ -518,20 +531,21 @@ pub fn climbing_movement_system(
         if keys.pressed(KeyCode::ArrowDown) || keys.pressed(KeyCode::KeyS) {
             movement.y -= 1.0;
         }
-        
+
         if movement.length() > 0.0 {
             movement = movement.normalize();
             transform.translation += movement * stats.speed * time.delta_seconds();
-            
+
             // Regenerate stamina when not climbing up
             if movement.y <= 0.0 {
-                stats.stamina = (stats.stamina + 10.0 * time.delta_seconds()).min(stats.max_stamina);
+                stats.stamina =
+                    (stats.stamina + 10.0 * time.delta_seconds()).min(stats.max_stamina);
             }
         } else {
             // Faster stamina regen when not moving
             stats.stamina = (stats.stamina + 15.0 * time.delta_seconds()).min(stats.max_stamina);
         }
-        
+
         // Prevent movement if out of stamina
         if stats.stamina <= 0.0 && movement.y > 0.0 {
             movement.y = 0.0;
@@ -549,7 +563,7 @@ pub fn terrain_interaction_system(
         for mut health in health_query.iter_mut() {
             // Simple hazard check based on position
             let player_y = player_transform.translation.y;
-            
+
             // High altitude effects
             if player_y > 500.0 {
                 health.current -= 1.0 * 0.016; // Lose health at high altitude
@@ -565,11 +579,11 @@ pub fn weather_system(
     mut health_query: Query<&mut Health, With<Player>>,
 ) {
     weather.weather_change_timer += time.delta_seconds();
-    
+
     // Change weather every 2-5 minutes of real time
     if weather.weather_change_timer > 120.0 {
         weather.weather_change_timer = 0.0;
-        
+
         // Simple weather changes based on time of day
         if game_time.is_night() {
             weather.temperature -= 5.0;
@@ -577,21 +591,21 @@ pub fn weather_system(
         } else {
             weather.temperature += 3.0;
         }
-        
+
         weather.temperature = weather.temperature.clamp(-20.0, 25.0);
     }
-    
+
     // Apply weather effects to players
     for mut health in health_query.iter_mut() {
         if weather.temperature < -10.0 {
             health.current -= 0.5 * time.delta_seconds(); // Cold damage
         }
-        
+
         match weather.current_weather {
             Weather::Storm | Weather::Blizzard => {
                 health.current -= 0.2 * time.delta_seconds();
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 }
@@ -604,11 +618,14 @@ pub fn wildlife_system(
     // Basic wildlife behavior - animals move randomly or flee from players
     for (mut animal_transform, wildlife) in wildlife_query.iter_mut() {
         for player_transform in player_query.iter() {
-            let distance = animal_transform.translation.distance(player_transform.translation);
-            
+            let distance = animal_transform
+                .translation
+                .distance(player_transform.translation);
+
             if distance < wildlife.flee_distance {
                 // Animal flees from player
-                let flee_direction = (animal_transform.translation - player_transform.translation).normalize();
+                let flee_direction =
+                    (animal_transform.translation - player_transform.translation).normalize();
                 animal_transform.translation += flee_direction * 50.0 * time.delta_seconds();
             }
         }
@@ -628,10 +645,10 @@ pub fn health_system(
         if thirst.current <= 0.0 {
             health.current -= 5.0 * time.delta_seconds();
         }
-        
+
         // Clamp health
         health.current = health.current.clamp(0.0, health.max);
-        
+
         // Check for game over
         if health.current <= 0.0 {
             game_over.set(GameState::GameOver);
@@ -653,7 +670,7 @@ pub fn conversation_system(
         next_state.set(GameState::Climbing);
         info!("Conversation ended");
     }
-    
+
     // In a real implementation, this would handle dialogue trees
     for npc in npc_query.iter() {
         if keys.just_pressed(KeyCode::Digit1) {
@@ -711,7 +728,7 @@ pub fn setup_ui(mut commands: Commands) {
                     ));
                 })
                 .insert(HealthBar);
-            
+
             // Health Label
             parent.spawn(TextBundle::from_section(
                 "Health: 100/100",
@@ -752,7 +769,7 @@ pub fn setup_ui(mut commands: Commands) {
                     ));
                 })
                 .insert(StaminaBar);
-            
+
             // Stamina Label
             parent.spawn(TextBundle::from_section(
                 "Stamina: 100/100",
@@ -777,13 +794,13 @@ pub fn update_health_stamina_ui(
             let health_percentage = (health.current / health.max) * 100.0;
             style.width = Val::Percent(health_percentage);
         }
-        
+
         // Update stamina bar width
         for mut style in stamina_bar_query.iter_mut() {
             let stamina_percentage = (movement_stats.stamina / movement_stats.max_stamina) * 100.0;
             style.width = Val::Percent(stamina_percentage);
         }
-        
+
         // Update text labels
         let mut texts = text_query.iter_mut().collect::<Vec<_>>();
         if texts.len() >= 2 {
@@ -793,7 +810,10 @@ pub fn update_health_stamina_ui(
             }
             // Stamina text
             if let Some(text_sections) = texts[1].sections.first_mut() {
-                text_sections.value = format!("Stamina: {:.0}/{:.0}", movement_stats.stamina, movement_stats.max_stamina);
+                text_sections.value = format!(
+                    "Stamina: {:.0}/{:.0}",
+                    movement_stats.stamina, movement_stats.max_stamina
+                );
             }
         }
     }
@@ -804,7 +824,7 @@ pub fn update_health_stamina_ui(
 pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Entity, With<Player>>) {
     if let Ok(player_entity) = player_query.get_single() {
         info!("🎒 Setting up starting equipment for player...");
-        
+
         // Create starting items
         let ice_axe = Item {
             id: "ice_axe_01".to_string(),
@@ -821,7 +841,7 @@ pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Enti
                 protection: Some(5.0),
             },
         };
-        
+
         let heavy_boots = Item {
             id: "heavy_boots_01".to_string(),
             name: "Heavy Climbing Boots".to_string(),
@@ -830,14 +850,14 @@ pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Enti
             durability: Some(100.0),
             properties: ItemProperties {
                 strength: Some(10.0), // +10% climbing ability
-                warmth: Some(20.0), // Cold protection
+                warmth: Some(20.0),   // Cold protection
                 magic_power: None,
                 nutrition: None,
                 water: None,
                 protection: Some(15.0),
             },
         };
-        
+
         let wool_jacket = Item {
             id: "wool_jacket_01".to_string(),
             name: "Wool Jacket".to_string(),
@@ -853,7 +873,7 @@ pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Enti
                 protection: Some(10.0),
             },
         };
-        
+
         // Create starting inventory
         let starting_items = vec![ice_axe.clone(), heavy_boots.clone(), wool_jacket.clone()];
         let inventory = Inventory {
@@ -862,16 +882,16 @@ pub fn setup_starting_equipment(mut commands: Commands, player_query: Query<Enti
             weight_limit: 25.0,
             current_weight: ice_axe.weight + heavy_boots.weight + wool_jacket.weight,
         };
-        
+
         // Create equipped items with axe and boots equipped
         let mut equipped = EquippedItems::new();
         equipped.axe = Some(ice_axe);
         equipped.boots = Some(heavy_boots);
         equipped.jacket = Some(wool_jacket);
-        
+
         // Add components to player
         commands.entity(player_entity).insert((inventory, equipped));
-        
+
         info!("🎒 Starting equipment loaded: Ice Axe (+15% climb), Heavy Boots (+10% climb, +20 warmth), Wool Jacket (+30 warmth)");
     } else {
         warn!("⚠️ Could not find player entity to add starting equipment!");
@@ -897,13 +917,13 @@ pub fn inventory_input_system(
             _ => {}
         }
     }
-    
+
     // Handle Escape key (only closes inventory)
-    if keyboard_input.just_pressed(KeyCode::Escape)
-        && current_state.get() == &GameState::Inventory {
-            next_state.set(GameState::Climbing);
-            info!("📦 Closing inventory with Escape...");
-        }
+    if keyboard_input.just_pressed(KeyCode::Escape) && current_state.get() == &GameState::Inventory
+    {
+        next_state.set(GameState::Climbing);
+        info!("📦 Closing inventory with Escape...");
+    }
 }
 
 pub fn close_button_system(
@@ -973,7 +993,7 @@ pub fn setup_inventory_ui(mut commands: Commands) {
                             ..default()
                         },
                     ));
-                    
+
                     // Close button
                     parent
                         .spawn((
@@ -1016,133 +1036,64 @@ pub fn setup_inventory_ui(mut commands: Commands) {
                     ..default()
                 })
                 .with_children(|parent| {
-            // Equipment panel (left side)
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Percent(40.0),
-                        height: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Column,
-                        margin: UiRect::right(Val::Px(20.0)),
-                        ..default()
-                    },
-                    background_color: Color::srgba(0.2, 0.2, 0.3, 0.8).into(),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    // Equipment title
-                    parent.spawn(TextBundle::from_section(
-                        "EQUIPPED",
-                        TextStyle {
-                            font_size: 24.0,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ));
-                    
-                    // Equipment slots
-                    let equipment_slots = vec![
-                        ("🪓 Axe", EquipmentSlotType::Axe),
-                        ("👢 Boots", EquipmentSlotType::Boots),
-                        ("🧥 Jacket", EquipmentSlotType::Jacket),
-                        ("🧤 Gloves", EquipmentSlotType::Gloves),
-                        ("🎒 Backpack", EquipmentSlotType::Backpack),
-                    ];
-                    
-                    for (label, slot_type) in equipment_slots {
-                        parent
-                            .spawn((
-                                NodeBundle {
-                                    style: Style {
-                                        width: Val::Percent(100.0),
-                                        height: Val::Px(60.0),
-                                        margin: UiRect::all(Val::Px(5.0)),
-                                        border: UiRect::all(Val::Px(2.0)),
-                                        padding: UiRect::all(Val::Px(10.0)),
-                                        align_items: AlignItems::Center,
-                                        ..default()
-                                    },
-                                    background_color: Color::srgba(0.3, 0.3, 0.4, 0.8).into(),
-                                    border_color: Color::srgb(0.5, 0.5, 0.5).into(),
-                                    ..default()
-                                },
-                                EquipmentSlot { slot_type },
-                            ))
-                            .with_children(|parent| {
-                                parent.spawn(TextBundle::from_section(
-                                    format!("{}: Empty", label),
-                                    TextStyle {
-                                        font_size: 16.0,
-                                        color: Color::WHITE,
-                                        ..default()
-                                    },
-                                ));
-                            });
-                    }
-                });
-
-            // Inventory panel (right side)
-            parent
-                .spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Percent(60.0),
-                        height: Val::Percent(100.0),
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },
-                    background_color: Color::srgba(0.2, 0.3, 0.2, 0.8).into(),
-                    ..default()
-                })
-                .with_children(|parent| {
-                    // Inventory title
-                    parent.spawn(TextBundle::from_section(
-                        "INVENTORY",
-                        TextStyle {
-                            font_size: 24.0,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ));
-                    
-                    // Inventory grid
+                    // Equipment panel (left side)
                     parent
                         .spawn(NodeBundle {
                             style: Style {
-                                width: Val::Percent(100.0),
-                                height: Val::Percent(80.0),
+                                width: Val::Percent(40.0),
+                                height: Val::Percent(100.0),
                                 flex_direction: FlexDirection::Column,
-                                flex_wrap: FlexWrap::Wrap,
+                                margin: UiRect::right(Val::Px(20.0)),
                                 ..default()
                             },
+                            background_color: Color::srgba(0.2, 0.2, 0.3, 0.8).into(),
                             ..default()
                         })
                         .with_children(|parent| {
-                            // Create inventory slots
-                            for i in 0..20 {
+                            // Equipment title
+                            parent.spawn(TextBundle::from_section(
+                                "EQUIPPED",
+                                TextStyle {
+                                    font_size: 24.0,
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                            ));
+
+                            // Equipment slots
+                            let equipment_slots = vec![
+                                ("🪓 Axe", EquipmentSlotType::Axe),
+                                ("👢 Boots", EquipmentSlotType::Boots),
+                                ("🧥 Jacket", EquipmentSlotType::Jacket),
+                                ("🧤 Gloves", EquipmentSlotType::Gloves),
+                                ("🎒 Backpack", EquipmentSlotType::Backpack),
+                            ];
+
+                            for (label, slot_type) in equipment_slots {
                                 parent
                                     .spawn((
                                         NodeBundle {
                                             style: Style {
-                                                width: Val::Px(80.0),
-                                                height: Val::Px(80.0),
-                                                margin: UiRect::all(Val::Px(2.0)),
-                                                border: UiRect::all(Val::Px(1.0)),
-                                                padding: UiRect::all(Val::Px(5.0)),
+                                                width: Val::Percent(100.0),
+                                                height: Val::Px(60.0),
+                                                margin: UiRect::all(Val::Px(5.0)),
+                                                border: UiRect::all(Val::Px(2.0)),
+                                                padding: UiRect::all(Val::Px(10.0)),
                                                 align_items: AlignItems::Center,
-                                                justify_content: JustifyContent::Center,
                                                 ..default()
                                             },
-                                            background_color: Color::srgba(0.4, 0.4, 0.4, 0.6).into(),
-                                            border_color: Color::srgb(0.6, 0.6, 0.6).into(),
+                                            background_color: Color::srgba(0.3, 0.3, 0.4, 0.8)
+                                                .into(),
+                                            border_color: Color::srgb(0.5, 0.5, 0.5).into(),
                                             ..default()
                                         },
-                                        InventorySlot { slot_index: i },
+                                        EquipmentSlot { slot_type },
                                     ))
                                     .with_children(|parent| {
                                         parent.spawn(TextBundle::from_section(
-                                            "",
+                                            format!("{}: Empty", label),
                                             TextStyle {
-                                                font_size: 12.0,
+                                                font_size: 16.0,
                                                 color: Color::WHITE,
                                                 ..default()
                                             },
@@ -1150,18 +1101,91 @@ pub fn setup_inventory_ui(mut commands: Commands) {
                                     });
                             }
                         });
-                    
-                    // Stats panel
-                    parent.spawn(TextBundle::from_section(
-                        "Weight: 0/25 kg",
-                        TextStyle {
-                            font_size: 16.0,
-                            color: Color::srgb(1.0, 1.0, 0.0), // Yellow
+
+                    // Inventory panel (right side)
+                    parent
+                        .spawn(NodeBundle {
+                            style: Style {
+                                width: Val::Percent(60.0),
+                                height: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Column,
+                                ..default()
+                            },
+                            background_color: Color::srgba(0.2, 0.3, 0.2, 0.8).into(),
                             ..default()
-                        },
-                    ));
+                        })
+                        .with_children(|parent| {
+                            // Inventory title
+                            parent.spawn(TextBundle::from_section(
+                                "INVENTORY",
+                                TextStyle {
+                                    font_size: 24.0,
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                            ));
+
+                            // Inventory grid
+                            parent
+                                .spawn(NodeBundle {
+                                    style: Style {
+                                        width: Val::Percent(100.0),
+                                        height: Val::Percent(80.0),
+                                        flex_direction: FlexDirection::Column,
+                                        flex_wrap: FlexWrap::Wrap,
+                                        ..default()
+                                    },
+                                    ..default()
+                                })
+                                .with_children(|parent| {
+                                    // Create inventory slots
+                                    for i in 0..20 {
+                                        parent
+                                            .spawn((
+                                                NodeBundle {
+                                                    style: Style {
+                                                        width: Val::Px(80.0),
+                                                        height: Val::Px(80.0),
+                                                        margin: UiRect::all(Val::Px(2.0)),
+                                                        border: UiRect::all(Val::Px(1.0)),
+                                                        padding: UiRect::all(Val::Px(5.0)),
+                                                        align_items: AlignItems::Center,
+                                                        justify_content: JustifyContent::Center,
+                                                        ..default()
+                                                    },
+                                                    background_color: Color::srgba(
+                                                        0.4, 0.4, 0.4, 0.6,
+                                                    )
+                                                    .into(),
+                                                    border_color: Color::srgb(0.6, 0.6, 0.6).into(),
+                                                    ..default()
+                                                },
+                                                InventorySlot { slot_index: i },
+                                            ))
+                                            .with_children(|parent| {
+                                                parent.spawn(TextBundle::from_section(
+                                                    "",
+                                                    TextStyle {
+                                                        font_size: 12.0,
+                                                        color: Color::WHITE,
+                                                        ..default()
+                                                    },
+                                                ));
+                                            });
+                                    }
+                                });
+
+                            // Stats panel
+                            parent.spawn(TextBundle::from_section(
+                                "Weight: 0/25 kg",
+                                TextStyle {
+                                    font_size: 16.0,
+                                    color: Color::srgb(1.0, 1.0, 0.0), // Yellow
+                                    ..default()
+                                },
+                            ));
+                        });
                 });
-            });
         });
 }
 
@@ -1180,7 +1204,7 @@ pub fn update_inventory_ui(
                     if let Ok(mut text) = text_query.get_mut(*child) {
                         // Find which type of slot this is by checking the current text
                         let current_text = &text.sections[0].value;
-                        
+
                         if current_text.contains("🪓") || current_text.contains("Axe") {
                             text.sections[0].value = if let Some(axe) = &equipped.axe {
                                 format!("🪓 {}", axe.name)
@@ -1205,7 +1229,8 @@ pub fn update_inventory_ui(
                             } else {
                                 "🧤 Gloves: Empty".to_string()
                             };
-                        } else if current_text.contains("🎒") || current_text.contains("Backpack") {
+                        } else if current_text.contains("🎒") || current_text.contains("Backpack")
+                        {
                             text.sections[0].value = if let Some(backpack) = &equipped.backpack {
                                 format!("🎒 {}", backpack.name)
                             } else {
@@ -1217,18 +1242,24 @@ pub fn update_inventory_ui(
                 }
             }
         }
-        
+
         // Update weight display
         for mut text in text_query.iter_mut() {
             if !text.sections.is_empty() && text.sections[0].value.contains("Weight:") {
-                text.sections[0].value = format!("Weight: {:.1}/{:.0} kg", inventory.current_weight, inventory.weight_limit);
+                text.sections[0].value = format!(
+                    "Weight: {:.1}/{:.0} kg",
+                    inventory.current_weight, inventory.weight_limit
+                );
                 break;
             }
         }
     }
 }
 
-pub fn cleanup_inventory_ui(mut commands: Commands, inventory_ui_query: Query<Entity, With<InventoryUI>>) {
+pub fn cleanup_inventory_ui(
+    mut commands: Commands,
+    inventory_ui_query: Query<Entity, With<InventoryUI>>,
+) {
     for entity in inventory_ui_query.iter() {
         commands.entity(entity).despawn_recursive();
     }
@@ -1240,13 +1271,13 @@ pub fn apply_equipment_bonuses(
     for (mut movement_stats, equipped) in player_query.iter_mut() {
         // Base climbing skill
         let base_skill = 1.0;
-        
+
         // Apply equipment bonuses
         let equipment_bonus = equipped.get_climbing_bonus() / 100.0; // Convert percentage to decimal
-        
+
         // Update climbing skill with equipment bonus
         movement_stats.climbing_skill = base_skill + equipment_bonus;
-        
+
         // You could also modify movement speed based on boots, etc.
         // movement_stats.speed = base_speed * boot_modifier;
     }

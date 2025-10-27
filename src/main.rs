@@ -1,32 +1,22 @@
 use bevy::prelude::*;
 
 mod components;
-mod systems;
+mod levels;
 mod resources;
 mod states;
-mod levels;
+mod systems;
 
 use components::*;
-use systems::*;
 use resources::*;
 use states::*;
+use systems::*;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_state::<GameState>()
-        .add_systems(
-            Startup, 
-            (
-                setup,
-                setup_ui,
-                load_terrain_from_level,
-            )
-        )
-        .add_systems(
-            PostStartup,
-            setup_starting_equipment
-        )
+        .add_systems(Startup, (setup, setup_ui, load_terrain_from_level))
+        .add_systems(PostStartup, setup_starting_equipment)
         .add_systems(
             Update,
             (
@@ -40,7 +30,8 @@ fn main() {
                 // Equipment systems
                 inventory_input_system,
                 apply_equipment_bonuses,
-            ).run_if(in_state(GameState::Climbing)),
+            )
+                .run_if(in_state(GameState::Climbing)),
         )
         .add_systems(OnEnter(GameState::Inventory), setup_inventory_ui)
         .add_systems(OnExit(GameState::Inventory), cleanup_inventory_ui)
@@ -51,16 +42,13 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    mut next_state: ResMut<NextState<GameState>>,
-) {
+fn setup(mut commands: Commands, mut next_state: ResMut<NextState<GameState>>) {
     // Spawn camera
     commands.spawn(Camera2dBundle::default());
-    
+
     // Initialize basic game resources
     commands.insert_resource(GameTime::new());
-    
+
     // Spawn player for Phase 2 with Health & Stamina
     commands.spawn((
         SpriteBundle {
@@ -73,18 +61,21 @@ fn setup(
             ..default()
         },
         Player { id: 1 },
-        Health { current: 100.0, max: 100.0 },
-        MovementStats { 
+        Health {
+            current: 100.0,
+            max: 100.0,
+        },
+        MovementStats {
             speed: 200.0,
             climbing_skill: 1.0,
             stamina: 100.0,
             max_stamina: 100.0,
         },
     ));
-    
+
     // Start in climbing state for Phase 1
     next_state.set(GameState::Climbing);
-    
+
     info!("🎮 Health & Stamina Active! Watch console: Move=drain stamina, Rest=regenerate, Ice/Snow=damage!");
     info!("📊 Health/Stamina display updates every 2 seconds. Move around to see effects!");
 }

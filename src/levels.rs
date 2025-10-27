@@ -1,6 +1,6 @@
+use crate::components::*;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::components::*;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LevelDefinition {
@@ -105,7 +105,11 @@ impl LevelDefinition {
             };
 
             commands.spawn((
-                Transform::from_translation(Vec3::new(wildlife_spawn.position.0, wildlife_spawn.position.1, 1.0)),
+                Transform::from_translation(Vec3::new(
+                    wildlife_spawn.position.0,
+                    wildlife_spawn.position.1,
+                    1.0,
+                )),
                 Wildlife {
                     species,
                     aggression: wildlife_spawn.aggression,
@@ -127,7 +131,11 @@ impl LevelDefinition {
             };
 
             commands.spawn((
-                Transform::from_translation(Vec3::new(npc_spawn.position.0, npc_spawn.position.1, 1.0)),
+                Transform::from_translation(Vec3::new(
+                    npc_spawn.position.0,
+                    npc_spawn.position.1,
+                    1.0,
+                )),
                 Npc {
                     name: npc_spawn.name.clone(),
                     npc_type,
@@ -147,14 +155,20 @@ impl LevelDefinition {
 pub fn create_tutorial_level() -> LevelDefinition {
     let width = 20;
     let height = 15;
-    let mut terrain = vec![vec![TerrainData {
-        terrain_type: TerrainType::Soil,
-        slope: 0.0,
-        stability: 1.0,
-        climbable: false,
-        climbing_difficulty: None,
-        required_gear: vec![],
-    }; width]; height];
+    let mut terrain = vec![
+        vec![
+            TerrainData {
+                terrain_type: TerrainType::Soil,
+                slope: 0.0,
+                stability: 1.0,
+                climbable: false,
+                climbing_difficulty: None,
+                required_gear: vec![],
+            };
+            width
+        ];
+        height
+    ];
 
     // Create a simple climbing route
     #[allow(clippy::needless_range_loop)]
@@ -197,42 +211,42 @@ pub fn create_tutorial_level() -> LevelDefinition {
             wind_speed: 5.0,
             weather_type: "clear".to_string(),
         },
-        wildlife_spawns: vec![
-            WildlifeSpawn {
-                species: "sheep".to_string(),
-                position: (100.0, 150.0),
-                aggression: 0.0,
-            }
-        ],
-        npc_spawns: vec![
-            NPCSpawn {
-                name: "Erik the Guide".to_string(),
-                npc_type: "guide".to_string(),
-                position: (150.0, 100.0),
-                dialogue_file: "erik_guide.ron".to_string(),
-            }
-        ],
-        items: vec![
-            ItemSpawn {
-                item_id: "rope".to_string(),
-                position: (200.0, 80.0),
-                quantity: 1,
-            }
-        ],
+        wildlife_spawns: vec![WildlifeSpawn {
+            species: "sheep".to_string(),
+            position: (100.0, 150.0),
+            aggression: 0.0,
+        }],
+        npc_spawns: vec![NPCSpawn {
+            name: "Erik the Guide".to_string(),
+            npc_type: "guide".to_string(),
+            position: (150.0, 100.0),
+            dialogue_file: "erik_guide.ron".to_string(),
+        }],
+        items: vec![ItemSpawn {
+            item_id: "rope".to_string(),
+            position: (200.0, 80.0),
+            quantity: 1,
+        }],
     }
 }
 
 pub fn create_iceland_glacier_level() -> LevelDefinition {
     let width = 30;
     let height = 25;
-    let mut terrain = vec![vec![TerrainData {
-        terrain_type: TerrainType::Snow,
-        slope: 0.2,
-        stability: 0.7,
-        climbable: false,
-        climbing_difficulty: None,
-        required_gear: vec![],
-    }; width]; height];
+    let mut terrain = vec![
+        vec![
+            TerrainData {
+                terrain_type: TerrainType::Snow,
+                slope: 0.2,
+                stability: 0.7,
+                climbable: false,
+                climbing_difficulty: None,
+                required_gear: vec![],
+            };
+            width
+        ];
+        height
+    ];
 
     // Create glacier (jökull) terrain
     #[allow(clippy::needless_range_loop)]
@@ -264,7 +278,8 @@ pub fn create_iceland_glacier_level() -> LevelDefinition {
     LevelDefinition {
         id: "iceland_glacier_01".to_string(),
         name: "Vatnajökull Challenge".to_string(),
-        description: "Scale the mighty Icelandic glacier with proper gear and Viking courage".to_string(),
+        description: "Scale the mighty Icelandic glacier with proper gear and Viking courage"
+            .to_string(),
         width,
         height,
         terrain,
@@ -285,7 +300,7 @@ pub fn create_iceland_glacier_level() -> LevelDefinition {
                 species: "horse".to_string(),
                 position: (100.0, 100.0),
                 aggression: 0.0,
-            }
+            },
         ],
         npc_spawns: vec![
             NPCSpawn {
@@ -299,7 +314,7 @@ pub fn create_iceland_glacier_level() -> LevelDefinition {
                 npc_type: "mage".to_string(),
                 position: (500.0, 300.0),
                 dialogue_file: "freydis_mage.ron".to_string(),
-            }
+            },
         ],
         items: vec![
             ItemSpawn {
@@ -311,20 +326,20 @@ pub fn create_iceland_glacier_level() -> LevelDefinition {
                 item_id: "rune_stone".to_string(),
                 position: (450.0, 250.0),
                 quantity: 1,
-            }
+            },
         ],
     }
 }
 
 pub fn save_sample_levels() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all("levels")?;
-    
+
     let tutorial = create_tutorial_level();
     tutorial.save_to_file("levels/tutorial_01.ron")?;
-    
+
     let glacier = create_iceland_glacier_level();
     glacier.save_to_file("levels/iceland_glacier_01.ron")?;
-    
+
     info!("Sample levels saved to levels/ directory");
     Ok(())
 }
