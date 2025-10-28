@@ -18,7 +18,6 @@ ron = "0.8"
 rand = "0.8"
 
 [dev-dependencies]
-cargo-husky = { version = "1.5", default-features = false, features = ["precommit-hook", "run-cargo-test", "run-cargo-clippy", "run-cargo-fmt"] }
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
