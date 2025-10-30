@@ -223,6 +223,8 @@ pub struct Npc {
     pub npc_type: NPCType,
     pub dialogue_tree: String, // Reference to dialogue file
     pub join_probability: f32,
+    pub reputation_modifier: f32, // How much they like/dislike the player
+    pub current_mood: f32, // Affects dialogue responses (0.0-1.0)
 }
 
 #[derive(Clone, Debug)]
@@ -233,6 +235,94 @@ pub enum NPCType {
     Hermit,
     Viking,
     Mage,
+}
+
+// ===== DIALOGUE SYSTEM =====
+
+#[derive(Component)]
+pub struct DialogueTree {
+    pub current_node: String,
+    pub nodes: std::collections::HashMap<String, DialogueNode>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DialogueNode {
+    pub text: String,
+    pub speaker: String,
+    pub options: Vec<DialogueOption>,
+    pub effects: Vec<DialogueEffect>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DialogueOption {
+    pub text: String,
+    pub next_node: String,
+    pub requirements: Vec<DialogueRequirement>,
+}
+
+#[derive(Clone, Debug)]
+pub enum DialogueRequirement {
+    MinReputation(f32),
+    HasItem(String),
+    InParty(bool),
+}
+
+#[derive(Clone, Debug)]
+pub enum DialogueEffect {
+    ChangeReputation(f32),
+    InviteToParty,
+    GiveItem(String),
+    EndConversation,
+}
+
+#[derive(Component)]
+pub struct InConversation {
+    pub with_npc: Entity,
+    pub current_node: String,
+}
+
+#[derive(Component)]
+pub struct ConversationRange {
+    pub distance: f32,
+}
+
+#[derive(Component)]
+pub struct InteractionPrompt {
+    pub target_npc: Entity,
+}
+
+// ===== NPC AI BEHAVIOR =====
+
+#[derive(Component)]
+pub struct NpcBehavior {
+    pub behavior_type: NpcBehaviorType,
+    pub last_action_time: f32,
+    pub action_cooldown: f32,
+    pub wander_radius: f32,
+    pub home_position: Vec3,
+}
+
+#[derive(Clone, Debug)]
+pub enum NpcBehaviorType {
+    Wandering,
+    Stationary,
+    Following,
+    Resting,
+}
+
+#[derive(Component)]
+pub struct PartyMember {
+    pub leader: Entity,
+    pub follow_distance: f32,
+}
+
+// ===== EVENTS =====
+
+#[derive(Event)]
+pub struct PartyInvitationEvent {
+    pub player_entity: Entity,
+    pub npc_entity: Entity,
+    pub player_reputation: f32,
 }
 
 #[derive(Component)]
@@ -360,9 +450,6 @@ pub enum InteractionType {
 
 #[derive(Component)]
 pub struct SelectedCharacter;
-
-#[derive(Component)]
-pub struct InConversation;
 
 #[derive(Component)]
 pub struct Sleeping {

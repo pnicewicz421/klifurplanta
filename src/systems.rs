@@ -1520,3 +1520,564 @@ pub fn terrain_broken_handler_system(
         );
     }
 }
+
+// ===== DIALOGUE SYSTEM =====
+
+/// System to detect when player is near NPCs and show interaction prompt
+pub fn npc_proximity_system(
+    player_query: Query<&Transform, With<Player>>,
+    npc_query: Query<(Entity, &Transform, &Npc, &ConversationRange), Without<Player>>,
+    mut commands: Commands,
+    existing_prompts: Query<Entity, With<InteractionPrompt>>,
+) {
+    let Ok(player_transform) = player_query.get_single() else {
+        return;
+    };
+
+    clear_existing_prompts(&mut commands, &existing_prompts);
+    check_npc_proximity(player_transform, &npc_query, &mut commands);
+}
+
+fn clear_existing_prompts(
+    commands: &mut Commands,
+    existing_prompts: &Query<Entity, With<InteractionPrompt>>,
+) {
+    for entity in existing_prompts.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn check_npc_proximity(
+    player_transform: &Transform,
+    npc_query: &Query<(Entity, &Transform, &Npc, &ConversationRange), Without<Player>>,
+    commands: &mut Commands,
+) {
+    for (npc_entity, npc_transform, npc, range) in npc_query.iter() {
+        let distance = player_transform.translation.distance(npc_transform.translation);
+        
+        if distance <= range.distance {
+            spawn_interaction_prompt(commands, npc_entity, &npc.name);
+            break; // Only show one prompt at a time
+        }
+    }
+}
+
+fn spawn_interaction_prompt(commands: &mut Commands, npc_entity: Entity, npc_name: &str) {
+    commands.spawn((
+        TextBundle::from_section(
+            format!("Press E to talk to {}", npc_name),
+            TextStyle {
+                font_size: 16.0,
+                color: Color::WHITE,
+                ..default()
+            },
+        )
+        .with_text_justify(JustifyText::Center)
+        .with_style(Style {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(150.0),
+            left: Val::Percent(50.0),
+            ..default()
+        }),
+        InteractionPrompt { target_npc: npc_entity },
+    ));
+}
+
+/// System to handle starting conversations with NPCs
+pub fn conversation_input_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    player_query: Query<Entity, With<Player>>,
+    prompt_query: Query<&InteractionPrompt>,
+    npc_query: Query<&DialogueTree>,
+) {
+    if !keyboard_input.just_pressed(KeyCode::KeyE) {
+        return;
+    }
+
+    let Ok(player_entity) = player_query.get_single() else {
+        return;
+    };
+
+    if let Some(prompt) = prompt_query.iter().next() {
+        start_conversation(&mut commands, player_entity, prompt.target_npc, &npc_query);
+    }
+}
+
+fn start_conversation(
+    commands: &mut Commands,
+    player_entity: Entity,
+    npc_entity: Entity,
+    npc_query: &Query<&DialogueTree>,
+) {
+    if let Ok(dialogue_tree) = npc_query.get(npc_entity) {
+        commands.entity(player_entity).insert(InConversation {
+            with_npc: npc_entity,
+            current_node: dialogue_tree.current_node.clone(),
+        });
+        info!("💬 Started conversation with NPC");
+    }
+}
+
+/// System to handle dialogue progression and choices
+pub fn dialogue_system(
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut commands: Commands,
+    mut conversation_query: Query<(Entity, &mut InConversation), With<Player>>,
+    npc_query: Query<&DialogueTree>,
+) {
+    let Ok((player_entity, mut conversation)) = conversation_query.get_single_mut() else {
+        return;
+    };
+
+    handle_dialogue_input(
+        &keyboard_input,
+        &mut commands,
+        player_entity,
+        &mut conversation,
+        &npc_query,
+    );
+}
+
+fn handle_dialogue_input(
+    keyboard_input: &Res<ButtonInput<KeyCode>>,
+    commands: &mut Commands,
+    player_entity: Entity,
+    conversation: &mut InConversation,
+    npc_query: &Query<&DialogueTree>,
+) {
+    if keyboard_input.just_pressed(KeyCode::Escape) {
+        end_conversation(commands, player_entity);
+        return;
+    }
+
+    // Handle numbered choices (1-4)
+    let choice = get_dialogue_choice_input(keyboard_input);
+    if let Some(choice_num) = choice {
+        process_dialogue_choice(commands, player_entity, conversation, npc_query, choice_num);
+    }
+}
+
+fn get_dialogue_choice_input(keyboard_input: &Res<ButtonInput<KeyCode>>) -> Option<usize> {
+    if keyboard_input.just_pressed(KeyCode::Digit1) { Some(0) }
+    else if keyboard_input.just_pressed(KeyCode::Digit2) { Some(1) }
+    else if keyboard_input.just_pressed(KeyCode::Digit3) { Some(2) }
+    else if keyboard_input.just_pressed(KeyCode::Digit4) { Some(3) }
+    else { None }
+}
+
+fn process_dialogue_choice(
+    commands: &mut Commands,
+    player_entity: Entity,
+    conversation: &mut InConversation,
+    npc_query: &Query<&DialogueTree>,
+    choice_index: usize,
+) {
+    if let Ok(dialogue_tree) = npc_query.get(conversation.with_npc) {
+        if let Some(node) = dialogue_tree.nodes.get(&conversation.current_node) {
+            if let Some(option) = node.options.get(choice_index) {
+                conversation.current_node = option.next_node.clone();
+                
+                // Check if this ends the conversation
+                if option.next_node == "end" {
+                    end_conversation(commands, player_entity);
+                }
+            }
+        }
+    }
+}
+
+fn end_conversation(commands: &mut Commands, player_entity: Entity) {
+    commands.entity(player_entity).remove::<InConversation>();
+    info!("💬 Ended conversation");
+}
+
+// ===== PARTY INVITATION SYSTEM =====
+
+/// System to handle party invitations with acceptance/rejection mechanics
+pub fn party_invitation_system(
+    mut commands: Commands,
+    mut invitation_events: EventReader<PartyInvitationEvent>,
+    npc_query: Query<&Npc>,
+    player_query: Query<&Transform, With<Player>>,
+) {
+    for event in invitation_events.read() {
+        process_party_invitation(&mut commands, event, &npc_query, &player_query);
+    }
+}
+
+fn process_party_invitation(
+    commands: &mut Commands,
+    event: &PartyInvitationEvent,
+    npc_query: &Query<&Npc>,
+    _player_query: &Query<&Transform, With<Player>>,
+) {
+    if let Ok(npc) = npc_query.get(event.npc_entity) {
+        let acceptance_chance = calculate_invitation_acceptance(npc, &event.player_reputation);
+        
+        if roll_invitation_success(acceptance_chance) {
+            accept_party_invitation(commands, event, npc);
+        } else {
+            reject_party_invitation(npc);
+        }
+    }
+}
+
+fn calculate_invitation_acceptance(npc: &Npc, player_reputation: &f32) -> f32 {
+    let base_chance = npc.join_probability;
+    let reputation_bonus = (player_reputation * 0.2).clamp(-0.3, 0.3);
+    let mood_bonus = (npc.current_mood - 0.5) * 0.2;
+    
+    (base_chance + reputation_bonus + mood_bonus).clamp(0.0, 1.0)
+}
+
+fn roll_invitation_success(acceptance_chance: f32) -> bool {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    rng.gen::<f32>() < acceptance_chance
+}
+
+fn accept_party_invitation(commands: &mut Commands, event: &PartyInvitationEvent, npc: &Npc) {
+    commands.entity(event.npc_entity).insert(PartyMember {
+        leader: event.player_entity,
+        follow_distance: 50.0,
+    });
+    
+    info!("🎉 {} accepted your party invitation!", npc.name);
+}
+
+fn reject_party_invitation(npc: &Npc) {
+    info!("😔 {} declined your party invitation.", npc.name);
+}
+
+// ===== NPC AI BEHAVIOR =====
+
+/// System to handle basic NPC AI behaviors
+pub fn npc_behavior_system(
+    time: Res<Time>,
+    mut npc_query: Query<(&mut Transform, &mut NpcBehavior), (With<Npc>, Without<Player>)>,
+) {
+    for (mut transform, mut behavior) in npc_query.iter_mut() {
+        update_npc_behavior(&time, &mut transform, &mut behavior);
+    }
+}
+
+fn update_npc_behavior(
+    time: &Res<Time>,
+    transform: &mut Transform,
+    behavior: &mut NpcBehavior,
+) {
+    behavior.last_action_time += time.delta_seconds();
+    
+    if behavior.last_action_time >= behavior.action_cooldown {
+        execute_npc_behavior(transform, behavior);
+        behavior.last_action_time = 0.0;
+    }
+}
+
+fn execute_npc_behavior(transform: &mut Transform, behavior: &mut NpcBehavior) {
+    match behavior.behavior_type {
+        NpcBehaviorType::Wandering => execute_wandering_behavior(transform, behavior),
+        NpcBehaviorType::Stationary => {}, // Do nothing
+        NpcBehaviorType::Following => {}, // Would follow party leader
+        NpcBehaviorType::Resting => {}, // Maybe play rest animation
+    }
+}
+
+fn execute_wandering_behavior(transform: &mut Transform, behavior: &NpcBehavior) {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
+    
+    let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+    let distance = rng.gen_range(10.0..30.0);
+    
+    let new_x = behavior.home_position.x + angle.cos() * distance;
+    let new_y = behavior.home_position.y + angle.sin() * distance;
+    
+    // Simple movement toward new position
+    let target = Vec3::new(new_x, new_y, transform.translation.z);
+    let direction = (target - transform.translation).normalize_or_zero();
+    
+    transform.translation += direction * 20.0; // Move slowly
+}
+
+// ===== NPC SPAWNING =====
+
+/// System to spawn NPCs in the world during level loading
+pub fn spawn_npcs_system(mut commands: Commands) {
+    spawn_mountaineering_npcs(&mut commands);
+}
+
+fn spawn_mountaineering_npcs(commands: &mut Commands) {
+    spawn_experienced_guide(commands);
+    spawn_fellow_climber(commands);
+    spawn_mountain_hermit(commands);
+}
+
+fn spawn_experienced_guide(commands: &mut Commands) {
+    let guide_dialogue = create_guide_dialogue();
+    let spawn_position = Vec3::new(100.0, 200.0, 1.0);
+    
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::srgb(0.3, 0.6, 0.9), // Blue for guide
+                custom_size: Some(Vec2::new(24.0, 32.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(spawn_position),
+            ..default()
+        },
+        Npc {
+            name: "Erik the Guide".to_string(),
+            npc_type: NPCType::Guide,
+            dialogue_tree: "guide_basic".to_string(),
+            join_probability: 0.7,
+            reputation_modifier: 0.0,
+            current_mood: 0.8,
+        },
+        DialogueTree {
+            current_node: "greeting".to_string(),
+            nodes: guide_dialogue,
+        },
+        ConversationRange { distance: 60.0 },
+        NpcBehavior {
+            behavior_type: NpcBehaviorType::Stationary,
+            last_action_time: 0.0,
+            action_cooldown: 5.0,
+            wander_radius: 50.0,
+            home_position: spawn_position,
+        },
+    ));
+}
+
+fn spawn_fellow_climber(commands: &mut Commands) {
+    let climber_dialogue = create_climber_dialogue();
+    let spawn_position = Vec3::new(-150.0, 150.0, 1.0);
+    
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::srgb(0.8, 0.4, 0.2), // Orange for climber
+                custom_size: Some(Vec2::new(24.0, 32.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(spawn_position),
+            ..default()
+        },
+        Npc {
+            name: "Astrid".to_string(),
+            npc_type: NPCType::Climber,
+            dialogue_tree: "climber_basic".to_string(),
+            join_probability: 0.5,
+            reputation_modifier: 0.1,
+            current_mood: 0.6,
+        },
+        DialogueTree {
+            current_node: "greeting".to_string(),
+            nodes: climber_dialogue,
+        },
+        ConversationRange { distance: 60.0 },
+        NpcBehavior {
+            behavior_type: NpcBehaviorType::Wandering,
+            last_action_time: 0.0,
+            action_cooldown: 8.0,
+            wander_radius: 80.0,
+            home_position: spawn_position,
+        },
+    ));
+}
+
+fn spawn_mountain_hermit(commands: &mut Commands) {
+    let hermit_dialogue = create_hermit_dialogue();
+    let spawn_position = Vec3::new(200.0, -100.0, 1.0);
+    
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color: Color::srgb(0.5, 0.3, 0.6), // Purple for hermit
+                custom_size: Some(Vec2::new(24.0, 32.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(spawn_position),
+            ..default()
+        },
+        Npc {
+            name: "Old Magnus".to_string(),
+            npc_type: NPCType::Hermit,
+            dialogue_tree: "hermit_basic".to_string(),
+            join_probability: 0.2,
+            reputation_modifier: -0.1,
+            current_mood: 0.4,
+        },
+        DialogueTree {
+            current_node: "greeting".to_string(),
+            nodes: hermit_dialogue,
+        },
+        ConversationRange { distance: 50.0 },
+        NpcBehavior {
+            behavior_type: NpcBehaviorType::Stationary,
+            last_action_time: 0.0,
+            action_cooldown: 10.0,
+            wander_radius: 20.0,
+            home_position: spawn_position,
+        },
+    ));
+}
+
+// ===== DIALOGUE CONTENT CREATION =====
+
+fn create_guide_dialogue() -> std::collections::HashMap<String, DialogueNode> {
+    let mut nodes = std::collections::HashMap::new();
+    
+    nodes.insert("greeting".to_string(), DialogueNode {
+        text: "Greetings, fellow climber! I'm Erik, been guiding these mountains for 20 years.".to_string(),
+        speaker: "Erik the Guide".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "I could use some guidance on these peaks.".to_string(),
+                next_node: "offer_help".to_string(),
+                requirements: vec![],
+            },
+            DialogueOption {
+                text: "Want to join my climbing party?".to_string(),
+                next_node: "party_invite".to_string(),
+                requirements: vec![],
+            },
+            DialogueOption {
+                text: "Just passing through.".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![],
+    });
+    
+    nodes.insert("offer_help".to_string(), DialogueNode {
+        text: "The weather's been harsh lately. Ice axes are essential for the glacier sections.".to_string(),
+        speaker: "Erik the Guide".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "Thanks for the advice!".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![DialogueEffect::ChangeReputation(0.1)],
+    });
+    
+    nodes.insert("party_invite".to_string(), DialogueNode {
+        text: "I'd be honored to join your expedition! These mountains are safer with company.".to_string(),
+        speaker: "Erik the Guide".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "Welcome to the team!".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![DialogueEffect::InviteToParty],
+    });
+    
+    nodes
+}
+
+fn create_climber_dialogue() -> std::collections::HashMap<String, DialogueNode> {
+    let mut nodes = std::collections::HashMap::new();
+    
+    nodes.insert("greeting".to_string(), DialogueNode {
+        text: "Hey there! I'm Astrid. Been climbing solo, but these peaks are challenging.".to_string(),
+        speaker: "Astrid".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "How's the climb been?".to_string(),
+                next_node: "climbing_talk".to_string(),
+                requirements: vec![],
+            },
+            DialogueOption {
+                text: "Want to team up?".to_string(),
+                next_node: "party_invite".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![],
+    });
+    
+    nodes.insert("climbing_talk".to_string(), DialogueNode {
+        text: "Tough but rewarding! The ice sections require good technique.".to_string(),
+        speaker: "Astrid".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "Good luck with your climb!".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![],
+    });
+    
+    nodes.insert("party_invite".to_string(), DialogueNode {
+        text: "That sounds great! Safety in numbers, right?".to_string(),
+        speaker: "Astrid".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "Exactly! Let's climb together.".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![DialogueEffect::InviteToParty],
+    });
+    
+    nodes
+}
+
+fn create_hermit_dialogue() -> std::collections::HashMap<String, DialogueNode> {
+    let mut nodes = std::collections::HashMap::new();
+    
+    nodes.insert("greeting".to_string(), DialogueNode {
+        text: "Hmph. Another climber disturbing my solitude. I'm Magnus.".to_string(),
+        speaker: "Old Magnus".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "Sorry to bother you.".to_string(),
+                next_node: "respectful".to_string(),
+                requirements: vec![],
+            },
+            DialogueOption {
+                text: "Join my party?".to_string(),
+                next_node: "party_invite".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![],
+    });
+    
+    nodes.insert("respectful".to_string(), DialogueNode {
+        text: "Hmm, at least you have manners. These mountains teach respect.".to_string(),
+        speaker: "Old Magnus".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "I'll leave you in peace.".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![DialogueEffect::ChangeReputation(0.05)],
+    });
+    
+    nodes.insert("party_invite".to_string(), DialogueNode {
+        text: "Bah! I climb alone. Too old for your foolishness.".to_string(),
+        speaker: "Old Magnus".to_string(),
+        options: vec![
+            DialogueOption {
+                text: "Understood.".to_string(),
+                next_node: "end".to_string(),
+                requirements: vec![],
+            },
+        ],
+        effects: vec![DialogueEffect::ChangeReputation(-0.1)],
+    });
+    
+    nodes
+}

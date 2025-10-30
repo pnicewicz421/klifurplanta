@@ -142,6 +142,8 @@ impl LevelDefinition {
                     npc_type,
                     dialogue_tree: npc_spawn.dialogue_file.clone(),
                     join_probability: 0.2,
+                    reputation_modifier: 0.0,
+                    current_mood: 0.5,
                 },
                 Interactable {
                     interaction_type: InteractionType::Talk,

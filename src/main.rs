@@ -18,6 +18,8 @@ fn main() {
         .add_event::<TerrainBrokenEvent>()
         .add_systems(Startup, (setup, setup_ui, load_terrain_from_level))
         .add_systems(PostStartup, setup_starting_equipment)
+        .add_systems(PostStartup, spawn_npcs_system)
+        .add_event::<PartyInvitationEvent>()
         .add_systems(
             Update,
             (
@@ -33,6 +35,12 @@ fn main() {
                 // Ice axe terrain interaction systems
                 ice_axe_interaction_system,
                 terrain_broken_handler_system,
+                // NPC and dialogue systems
+                npc_proximity_system,
+                conversation_input_system,
+                dialogue_system,
+                party_invitation_system,
+                npc_behavior_system,
             )
                 .run_if(in_state(GameState::Climbing)),
         )
