@@ -4,8 +4,6 @@ use crate::states::*;
 use bevy::prelude::*;
 
 // Type aliases to fix clippy::type_complexity warnings
-type TerrainQuery<'w, 's> =
-    Query<'w, 's, (&'static Transform, &'static TerrainTile), (With<TerrainTile>, Without<Player>)>;
 type CloseButtonQuery<'w, 's> = Query<
     'w,
     's,
@@ -13,55 +11,150 @@ type CloseButtonQuery<'w, 's> = Query<
     (Changed<Interaction>, With<CloseButton>),
 >;
 
-/// Stamina and health regeneration system with feedback
-pub fn stamina_regeneration_system(
+/// Unified player movement system that handles both movement and stamina/health effects
+pub fn player_movement_system(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    mut player_query: Query<(&mut MovementStats, &mut Health), With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut MovementStats, &mut Health), With<Player>>,
+    mut last_movement_log: Local<f32>,
     mut last_regen_log: Local<f32>,
 ) {
-    for (mut stats, mut health) in player_query.iter_mut() {
-        // Check if player is moving (any arrow key pressed)
-        let is_moving = keyboard_input.pressed(KeyCode::ArrowUp)
-            || keyboard_input.pressed(KeyCode::ArrowDown)
-            || keyboard_input.pressed(KeyCode::ArrowLeft)
-            || keyboard_input.pressed(KeyCode::ArrowRight);
-
-        if !is_moving {
-            let old_stamina = stats.stamina;
-            let old_health = health.current;
-
-            // Regenerate stamina when not moving
-            let stamina_regen_rate = 15.0; // Stamina per second when resting
-            stats.stamina =
-                (stats.stamina + stamina_regen_rate * time.delta_seconds()).min(stats.max_stamina);
-
-            // Slow health regeneration when resting (if not in harsh conditions)
-            let health_regen_rate = 2.0; // Health per second when resting
-            health.current =
-                (health.current + health_regen_rate * time.delta_seconds()).min(health.max);
-
-            // Log regeneration periodically (every 3 seconds)
-            *last_regen_log += time.delta_seconds();
-            if *last_regen_log >= 3.0 {
-                *last_regen_log = 0.0;
-                if stats.stamina < stats.max_stamina || health.current < health.max {
-                    info!(
-                        "💚 Resting... Stamina: {:.1}/100 (+{:.1}), Health: {:.1}/100 (+{:.1})",
-                        stats.stamina,
-                        stats.stamina - old_stamina,
-                        health.current,
-                        health.current - old_health
-                    );
-                }
-            }
+    for (mut transform, mut stats, mut health) in player_query.iter_mut() {
+        let movement = get_movement_input(&keyboard_input);
+        let is_moving = movement.length() > 0.0;
+        
+        if is_moving {
+            handle_player_movement(
+                &mut transform,
+                &mut stats,
+                movement,
+                &time,
+                &mut last_movement_log,
+            );
+        } else {
+            handle_player_rest(
+                &mut stats,
+                &mut health,
+                &time,
+                &mut last_regen_log,
+            );
         }
 
-        // Death check
-        if health.current <= 0.0 {
-            error!("💀 Player has died! Health reached zero.");
-            // In a real game, you'd transition to a death/game over state here
+        check_player_death(&health);
+    }
+}
+
+fn get_movement_input(keyboard_input: &Res<ButtonInput<KeyCode>>) -> Vec3 {
+    let mut movement = Vec3::ZERO;
+    
+    if keyboard_input.pressed(KeyCode::ArrowLeft) || keyboard_input.pressed(KeyCode::KeyA) {
+        movement.x -= 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::ArrowRight) || keyboard_input.pressed(KeyCode::KeyD) {
+        movement.x += 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::ArrowUp) || keyboard_input.pressed(KeyCode::KeyW) {
+        movement.y += 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::ArrowDown) || keyboard_input.pressed(KeyCode::KeyS) {
+        movement.y -= 1.0;
+    }
+    
+    movement
+}
+
+fn handle_player_movement(
+    transform: &mut Transform,
+    stats: &mut MovementStats,
+    movement: Vec3,
+    time: &Res<Time>,
+    last_movement_log: &mut f32,
+) {
+    let normalized_movement = movement.normalize_or_zero();
+    transform.translation += normalized_movement * stats.speed * time.delta_seconds();
+    
+    let old_stamina = stats.stamina;
+    let stamina_drain_rate = calculate_stamina_drain_rate(movement);
+    
+    // Apply stamina drain
+    stats.stamina = (stats.stamina - stamina_drain_rate * time.delta_seconds()).max(0.0);
+
+    // Prevent upward movement if out of stamina
+    if stats.stamina <= 0.0 && movement.y > 0.0 {
+        transform.translation.y -= normalized_movement.y * stats.speed * time.delta_seconds();
+    }
+
+    log_movement_effects(stats.stamina, old_stamina, time, last_movement_log);
+}
+
+fn calculate_stamina_drain_rate(movement: Vec3) -> f32 {
+    if movement.y > 0.0 {
+        15.0 // Climbing up is more exhausting
+    } else {
+        5.0 // Moving horizontally or downward is less exhausting
+    }
+}
+
+fn log_movement_effects(current_stamina: f32, old_stamina: f32, time: &Res<Time>, last_movement_log: &mut f32) {
+    *last_movement_log += time.delta_seconds();
+    if *last_movement_log >= 0.5 {
+        *last_movement_log = 0.0;
+        let stamina_lost = old_stamina - current_stamina;
+        if stamina_lost > 0.0 {
+            info!(
+                "🏃 Moving! Stamina: {:.1}/100 (-{:.1})",
+                current_stamina, stamina_lost
+            );
         }
+    }
+}
+
+fn handle_player_rest(
+    stats: &mut MovementStats,
+    health: &mut Health,
+    time: &Res<Time>,
+    last_regen_log: &mut f32,
+) {
+    let old_stamina = stats.stamina;
+    let old_health = health.current;
+
+    // Regenerate stamina when not moving
+    let stamina_regen_rate = 15.0;
+    stats.stamina = (stats.stamina + stamina_regen_rate * time.delta_seconds()).min(stats.max_stamina);
+
+    // Slow health regeneration when resting
+    let health_regen_rate = 2.0;
+    health.current = (health.current + health_regen_rate * time.delta_seconds()).min(health.max);
+
+    log_regeneration_effects(stats, health, old_stamina, old_health, time, last_regen_log);
+}
+
+fn log_regeneration_effects(
+    stats: &MovementStats,
+    health: &Health,
+    old_stamina: f32,
+    old_health: f32,
+    time: &Res<Time>,
+    last_regen_log: &mut f32,
+) {
+    *last_regen_log += time.delta_seconds();
+    if *last_regen_log >= 3.0 {
+        *last_regen_log = 0.0;
+        if stats.stamina < stats.max_stamina || health.current < health.max {
+            info!(
+                "💚 Resting... Stamina: {:.1}/100 (+{:.1}), Health: {:.1}/100 (+{:.1})",
+                stats.stamina,
+                stats.stamina - old_stamina,
+                health.current,
+                health.current - old_health
+            );
+        }
+    }
+}
+
+fn check_player_death(health: &Health) {
+    if health.current <= 0.0 {
+        error!("💀 Player has died! Health reached zero.");
     }
 }
 
@@ -69,70 +162,99 @@ pub fn stamina_regeneration_system(
 
 /// System to load and spawn terrain from level files
 pub fn load_terrain_from_level(mut commands: Commands) {
-    // Load the tutorial level
-    let level_path = "levels/tutorial_01.ron";
+    let level_path = "levels/large_mountain_01.ron";
 
     match crate::levels::LevelDefinition::load_from_file(level_path) {
         Ok(level) => {
-            info!("Loading level: {}", level.name);
-
-            // Spawn terrain tiles from level data
-            for (row_idx, row) in level.terrain.iter().enumerate() {
-                for (col_idx, terrain_data) in row.iter().enumerate() {
-                    let color = get_terrain_color(&terrain_data.terrain_type);
-
-                    // Override climbable for soil terrain - should always be passable
-                    let climbable = match terrain_data.terrain_type {
-                        TerrainType::Soil => true,  // Always allow movement through soil/brown terrain
-                        _ => terrain_data.climbable, // Use level file setting for other terrain
-                    };
-
-                    commands.spawn((
-                        SpriteBundle {
-                            sprite: Sprite {
-                                color,
-                                custom_size: Some(Vec2::new(32.0, 32.0)),
-                                ..default()
-                            },
-                            transform: Transform::from_translation(Vec3::new(
-                                (col_idx as f32 - level.width as f32 / 2.0) * 32.0,
-                                (level.height as f32 / 2.0 - row_idx as f32) * 32.0,
-                                0.0,
-                            )),
-                            ..default()
-                        },
-                        TerrainTile {
-                            terrain_type: terrain_data.terrain_type.clone(),
-                            slope: terrain_data.slope,
-                            stability: terrain_data.stability,
-                            climbable,
-                        },
-                    ));
-                }
-            }
-
-            info!(
-                "Terrain loaded from {}: {}x{} tiles",
-                level_path, level.width, level.height
-            );
-            info!("Terrain types: Brown=soil, Gray=rock, Blue=ice, Green=grass, White=snow");
+            spawn_level_terrain(&mut commands, &level);
+            log_level_loading_success(level_path, &level);
         }
         Err(e) => {
             error!("Failed to load level {}: {}", level_path, e);
-            // Fallback to simple terrain for testing
             spawn_simple_fallback_terrain(&mut commands);
         }
     }
 }
 
+fn spawn_level_terrain(commands: &mut Commands, level: &crate::levels::LevelDefinition) {
+    info!("Loading level: {}", level.name);
+
+    for (row_idx, row) in level.terrain.iter().enumerate() {
+        for (col_idx, terrain_data) in row.iter().enumerate() {
+            spawn_terrain_tile(commands, level, row_idx, col_idx, terrain_data);
+        }
+    }
+}
+
+fn spawn_terrain_tile(
+    commands: &mut Commands,
+    level: &crate::levels::LevelDefinition,
+    row_idx: usize,
+    col_idx: usize,
+    terrain_data: &crate::levels::TerrainData,
+) {
+    let color = get_terrain_color(&terrain_data.terrain_type);
+    let climbable = determine_climbability(&terrain_data.terrain_type, terrain_data.climbable);
+
+    commands.spawn((
+        SpriteBundle {
+            sprite: Sprite {
+                color,
+                custom_size: Some(Vec2::new(32.0, 32.0)),
+                ..default()
+            },
+            transform: Transform::from_translation(calculate_tile_position(
+                level, row_idx, col_idx,
+            )),
+            ..default()
+        },
+        TerrainTile {
+            terrain_type: terrain_data.terrain_type.clone(),
+            slope: terrain_data.slope,
+            stability: terrain_data.stability,
+            climbable,
+        },
+    ));
+}
+
+fn determine_climbability(terrain_type: &TerrainType, file_climbable: bool) -> bool {
+    match terrain_type {
+        TerrainType::Soil => true, // Always allow movement through soil/brown terrain
+        _ => file_climbable,       // Use level file setting for other terrain
+    }
+}
+
+fn calculate_tile_position(
+    level: &crate::levels::LevelDefinition,
+    row_idx: usize,
+    col_idx: usize,
+) -> Vec3 {
+    Vec3::new(
+        (col_idx as f32 - level.width as f32 / 2.0) * 32.0,
+        (level.height as f32 / 2.0 - row_idx as f32) * 32.0,
+        0.0,
+    )
+}
+
+fn log_level_loading_success(level_path: &str, level: &crate::levels::LevelDefinition) {
+    info!(
+        "Terrain loaded from {}: {}x{} tiles",
+        level_path, level.width, level.height
+    );
+    info!("Terrain types: Brown=soil, Gray=rock, Blue=ice, Green=grass, White=snow");
+}
+
 /// Helper function to get color for terrain type
 fn get_terrain_color(terrain_type: &TerrainType) -> Color {
     match terrain_type {
-        TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2), // Brown
-        TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5), // Gray
-        TerrainType::Ice => Color::srgb(0.6, 0.8, 1.0),  // Light blue
-        TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9), // White
-        TerrainType::Grass => Color::srgb(0.2, 0.7, 0.2), // Green
+        TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2),     // Brown
+        TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5),     // Gray
+        TerrainType::Ice => Color::srgb(0.6, 0.8, 1.0),      // Light blue
+        TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9),     // White
+        TerrainType::Grass => Color::srgb(0.2, 0.7, 0.2),    // Green
+        TerrainType::Glacier => Color::srgb(0.8, 0.95, 1.0), // Bright icy blue
+        TerrainType::Lava => Color::srgb(0.2, 0.1, 0.1),     // Dark reddish-black
+        TerrainType::Coast => Color::srgb(0.8, 0.7, 0.5),    // Sandy beige
     }
 }
 
@@ -223,241 +345,6 @@ pub fn health_stamina_display_system(
     }
 }
 
-/// Enhanced movement system with better stamina feedback
-pub fn player_movement_system(
-    keyboard_input: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
-    mut player_query: Query<(&mut Transform, &mut MovementStats, &mut Health), With<Player>>,
-    terrain_query: TerrainQuery,
-) {
-    for (mut player_transform, mut stats, mut health) in player_query.iter_mut() {
-        let direction = get_movement_direction(&keyboard_input);
-        
-        if direction.length() > 0.0 {
-            handle_player_movement(
-                &mut player_transform,
-                &mut stats,
-                direction,
-                &terrain_query,
-                &time,
-            );
-        }
-
-        // Health effects from environmental hazards
-        apply_environmental_effects(
-            &mut health,
-            player_transform.translation,
-            &terrain_query,
-            time.delta_seconds(),
-        );
-    }
-}
-
-fn get_movement_direction(keyboard_input: &Res<ButtonInput<KeyCode>>) -> Vec3 {
-    let mut direction = Vec3::ZERO;
-
-    // Arrow key controls
-    if keyboard_input.pressed(KeyCode::ArrowUp) {
-        direction.y += 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::ArrowDown) {
-        direction.y -= 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::ArrowLeft) {
-        direction.x -= 1.0;
-    }
-    if keyboard_input.pressed(KeyCode::ArrowRight) {
-        direction.x += 1.0;
-    }
-
-    direction
-}
-
-fn handle_player_movement(
-    player_transform: &mut Transform,
-    stats: &mut MovementStats,
-    direction: Vec3,
-    terrain_query: &TerrainQuery,
-    time: &Res<Time>,
-) {
-    // Check if player has enough stamina to move
-    if stats.stamina <= 5.0 {
-        warn!(
-            "❌ Too exhausted to move! Stamina: {:.1}/100 - Rest to recover!",
-            stats.stamina
-        );
-        return;
-    }
-
-    let normalized_direction = direction.normalize();
-    let terrain_modifier = get_terrain_modifier_at_position(player_transform.translation, terrain_query);
-    
-    // Calculate and consume stamina
-    let stamina_cost = calculate_movement_stamina_cost(
-        player_transform.translation,
-        terrain_query,
-        time.delta_seconds(),
-    );
-    
-    stats.stamina = (stats.stamina - stamina_cost).max(0.0);
-    
-    // Log movement feedback
-    log_movement_feedback(stats.stamina, stamina_cost);
-    
-    // Calculate and apply movement
-    let movement = normalized_direction * stats.speed * terrain_modifier * time.delta_seconds();
-    let new_position = player_transform.translation + movement;
-
-    // Check collision and move if valid
-    if can_move_to_position(new_position, terrain_query) {
-        player_transform.translation = new_position;
-    }
-}
-
-fn calculate_movement_stamina_cost(
-    position: Vec3,
-    terrain_query: &TerrainQuery,
-    delta_time: f32,
-) -> f32 {
-    let stamina_cost = get_stamina_cost_for_terrain(position, terrain_query, delta_time);
-    stamina_cost
-}
-
-fn log_movement_feedback(stamina: f32, stamina_cost: f32) {
-    if stamina_cost > 0.0 {
-        info!("🏃 Moving! Stamina: {:.1}/100 (-{:.1})", stamina, stamina_cost);
-    }
-
-    if stamina < 20.0 && stamina > 0.0 {
-        warn!("⚠️ Stamina low: {:.1}/100", stamina);
-    }
-}
-
-/// Check if the player can move to a specific position (collision detection)
-fn can_move_to_position(position: Vec3, terrain_query: &TerrainQuery) -> bool {
-    let player_size = 16.0; // Half the player size for collision
-    let tile_size = 16.0; // Half the tile size
-
-    for (terrain_transform, terrain_tile) in terrain_query.iter() {
-        // Only check collision with climbable terrain (non-climbable = solid walls)
-        if !terrain_tile.climbable {
-            // Simple AABB collision detection
-            let distance = position.distance(terrain_transform.translation);
-            if distance < (player_size + tile_size) {
-                return false; // Collision detected
-            }
-        }
-    }
-    true // No collision
-}
-
-/// Calculate stamina cost based on terrain difficulty
-fn get_stamina_cost_for_terrain(
-    position: Vec3,
-    terrain_query: &TerrainQuery,
-    delta_time: f32,
-) -> f32 {
-    let detection_range = 20.0;
-    let base_stamina_cost = 8.0; // Stamina per second while moving
-
-    for (terrain_transform, terrain_tile) in terrain_query.iter() {
-        let distance = position.distance(terrain_transform.translation);
-        if distance < detection_range {
-            // Different terrain types cost different amounts of stamina
-            let terrain_multiplier = match terrain_tile.terrain_type {
-                TerrainType::Grass => 0.8, // Easy terrain
-                TerrainType::Soil => 1.0,  // Normal stamina cost
-                TerrainType::Rock => 1.8,  // Very exhausting
-                TerrainType::Ice => 1.2,   // Slippery but requires concentration
-                TerrainType::Snow => 2.0,  // Most exhausting
-            };
-
-            return base_stamina_cost * terrain_multiplier * delta_time;
-        }
-    }
-
-    base_stamina_cost * delta_time // Default cost
-}
-
-/// Apply environmental effects to health with detailed feedback
-fn apply_environmental_effects(
-    health: &mut Health,
-    position: Vec3,
-    terrain_query: &TerrainQuery,
-    delta_time: f32,
-) {
-    let detection_range = 20.0;
-
-    for (terrain_transform, terrain_tile) in terrain_query.iter() {
-        let distance = position.distance(terrain_transform.translation);
-        if distance < detection_range {
-            // Apply terrain-specific health effects
-            match terrain_tile.terrain_type {
-                TerrainType::Ice => {
-                    // Ice can cause minor health loss from cold
-                    let cold_damage = 1.5 * delta_time;
-                    let old_health = health.current;
-                    health.current = (health.current - cold_damage).max(0.0);
-                    if health.current < old_health {
-                        warn!(
-                            "🧊 Taking cold damage on ice! Health: {:.1}/100 (-{:.1})",
-                            health.current, cold_damage
-                        );
-                    }
-                }
-                TerrainType::Snow => {
-                    // Snow is even colder
-                    let cold_damage = 3.0 * delta_time;
-                    let old_health = health.current;
-                    health.current = (health.current - cold_damage).max(0.0);
-                    if health.current < old_health {
-                        error!(
-                            "❄️ Freezing in snow! Health: {:.1}/100 (-{:.1})",
-                            health.current, cold_damage
-                        );
-                    }
-                }
-                TerrainType::Grass => {
-                    // Grass is healing
-                    let healing = 0.5 * delta_time;
-                    let old_health = health.current;
-                    health.current = (health.current + healing).min(health.max);
-                    if health.current > old_health && health.current < health.max {
-                        info!(
-                            "🌱 Grass is healing you! Health: {:.1}/100 (+{:.1})",
-                            health.current, healing
-                        );
-                    }
-                }
-                TerrainType::Soil | TerrainType::Rock => {
-                    // Other terrain types don't affect health
-                }
-            }
-            break;
-        }
-    }
-}
-
-/// Get movement speed modifier based on terrain at current position
-fn get_terrain_modifier_at_position(position: Vec3, terrain_query: &TerrainQuery) -> f32 {
-    let detection_range = 20.0; // How close to terrain center to apply modifier
-
-    for (terrain_transform, terrain_tile) in terrain_query.iter() {
-        let distance = position.distance(terrain_transform.translation);
-        if distance < detection_range {
-            // Apply terrain-specific movement modifiers
-            return match terrain_tile.terrain_type {
-                TerrainType::Soil => 1.0,  // Normal speed
-                TerrainType::Grass => 1.1, // Slightly faster on grass
-                TerrainType::Rock => 0.7,  // Slower on rock
-                TerrainType::Ice => 1.4,   // Faster/slippery on ice
-                TerrainType::Snow => 0.6,  // Much slower in snow
-            };
-        }
-    }
-    1.0 // Default speed if not on any specific terrain
-}
-
 /// Simple time update system (renamed from time_system)
 pub fn update_time(time: Res<Time>, mut game_time: ResMut<GameTime>) {
     game_time.update(time.delta_seconds());
@@ -543,78 +430,6 @@ pub fn inventory_ui_system(inventory: Res<PlayerInventory>, game_time: Res<GameT
 }
 
 // ===== CLIMBING SYSTEMS =====
-
-pub fn climbing_movement_system(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Transform, &mut MovementStats), With<Player>>,
-    time: Res<Time>,
-) {
-    for (mut transform, mut stats) in query.iter_mut() {
-        let movement = get_climbing_movement(&keys);
-        
-        if movement.length() > 0.0 {
-            handle_climbing_movement(&mut transform, &mut stats, movement, &time);
-        } else {
-            handle_climbing_rest(&mut stats, &time);
-        }
-
-        // Prevent upward movement if out of stamina
-        enforce_stamina_limits(&mut stats, movement);
-    }
-}
-
-fn get_climbing_movement(keys: &Res<ButtonInput<KeyCode>>) -> Vec3 {
-    let mut movement = Vec3::ZERO;
-
-    if keys.pressed(KeyCode::ArrowLeft) || keys.pressed(KeyCode::KeyA) {
-        movement.x -= 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowRight) || keys.pressed(KeyCode::KeyD) {
-        movement.x += 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowUp) || keys.pressed(KeyCode::KeyW) {
-        movement.y += 1.0;
-    }
-    if keys.pressed(KeyCode::ArrowDown) || keys.pressed(KeyCode::KeyS) {
-        movement.y -= 1.0;
-    }
-
-    movement
-}
-
-fn handle_climbing_movement(
-    transform: &mut Transform,
-    stats: &mut MovementStats,
-    movement: Vec3,
-    time: &Res<Time>,
-) {
-    let normalized_movement = movement.normalize();
-    transform.translation += normalized_movement * stats.speed * time.delta_seconds();
-
-    // Climbing up uses stamina
-    if movement.y > 0.0 {
-        stats.stamina -= 20.0 * time.delta_seconds();
-    }
-
-    // Regenerate stamina when not climbing up
-    if movement.y <= 0.0 {
-        stats.stamina = (stats.stamina + 10.0 * time.delta_seconds()).min(stats.max_stamina);
-    }
-}
-
-fn handle_climbing_rest(stats: &mut MovementStats, time: &Res<Time>) {
-    // Faster stamina regen when not moving
-    stats.stamina = (stats.stamina + 15.0 * time.delta_seconds()).min(stats.max_stamina);
-}
-
-fn enforce_stamina_limits(stats: &mut MovementStats, movement: Vec3) {
-    // Prevent movement if out of stamina (this would need to be applied to transform in real system)
-    if stats.stamina <= 0.0 && movement.y > 0.0 {
-        // In a real implementation, we'd prevent the upward movement here
-        // For now, just ensure stamina doesn't go negative
-        stats.stamina = 0.0;
-    }
-}
 
 pub fn terrain_interaction_system(
     player_query: Query<&Transform, With<Player>>,
@@ -899,68 +714,90 @@ pub fn setup_starting_equipment(
     if let Ok((mut inventory, mut equipped)) = player_query.get_single_mut() {
         info!("🎒 Setting up starting equipment for player...");
 
-        // Create starting items
-        let ice_axe = Item {
-            id: "ice_axe_01".to_string(),
-            name: "Ice Axe".to_string(),
-            weight: 1.5,
-            item_type: ItemType::ClimbingGear,
-            durability: Some(100.0),
-            properties: ItemProperties {
-                strength: Some(15.0), // +15% climbing ability
-                warmth: None,
-                magic_power: None,
-                nutrition: None,
-                water: None,
-                protection: Some(5.0),
-            },
-        };
-
-        let heavy_boots = Item {
-            id: "heavy_boots_01".to_string(),
-            name: "Heavy Climbing Boots".to_string(),
-            weight: 3.0,
-            item_type: ItemType::Clothing,
-            durability: Some(100.0),
-            properties: ItemProperties {
-                strength: Some(10.0), // +10% climbing ability
-                warmth: Some(20.0),   // Cold protection
-                magic_power: None,
-                nutrition: None,
-                water: None,
-                protection: Some(15.0),
-            },
-        };
-
-        let wool_jacket = Item {
-            id: "wool_jacket_01".to_string(),
-            name: "Wool Jacket".to_string(),
-            weight: 2.0,
-            item_type: ItemType::Clothing,
-            durability: Some(100.0),
-            properties: ItemProperties {
-                strength: None,
-                warmth: Some(30.0), // Good cold protection
-                magic_power: None,
-                nutrition: None,
-                water: None,
-                protection: Some(10.0),
-            },
-        };
-
-        // Update inventory with starting items
-        inventory.items = vec![ice_axe.clone(), heavy_boots.clone(), wool_jacket.clone()];
-        inventory.current_weight = ice_axe.weight + heavy_boots.weight + wool_jacket.weight;
-
-        // Equip items
-        equipped.axe = Some(ice_axe);
-        equipped.boots = Some(heavy_boots);
-        equipped.jacket = Some(wool_jacket);
-
+        let starting_items = create_starting_items();
+        equip_starting_items(&mut inventory, &mut equipped, starting_items);
+        
         info!("🎒 Starting equipment loaded: Ice Axe (+15% climb), Heavy Boots (+10% climb, +20 warmth), Wool Jacket (+30 warmth)");
     } else {
         warn!("⚠️ Could not find player entity to add starting equipment!");
     }
+}
+
+fn create_starting_items() -> (Item, Item, Item) {
+    let ice_axe = create_ice_axe();
+    let heavy_boots = create_heavy_boots();
+    let wool_jacket = create_wool_jacket();
+    
+    (ice_axe, heavy_boots, wool_jacket)
+}
+
+fn create_ice_axe() -> Item {
+    Item {
+        id: "ice_axe_01".to_string(),
+        name: "Ice Axe".to_string(),
+        weight: 1.5,
+        item_type: ItemType::ClimbingGear,
+        durability: Some(100.0),
+        properties: ItemProperties {
+            strength: Some(15.0),
+            warmth: None,
+            magic_power: None,
+            nutrition: None,
+            water: None,
+            protection: Some(5.0),
+        },
+    }
+}
+
+fn create_heavy_boots() -> Item {
+    Item {
+        id: "heavy_boots_01".to_string(),
+        name: "Heavy Climbing Boots".to_string(),
+        weight: 3.0,
+        item_type: ItemType::Clothing,
+        durability: Some(100.0),
+        properties: ItemProperties {
+            strength: Some(10.0),
+            warmth: Some(20.0),
+            magic_power: None,
+            nutrition: None,
+            water: None,
+            protection: Some(15.0),
+        },
+    }
+}
+
+fn create_wool_jacket() -> Item {
+    Item {
+        id: "wool_jacket_01".to_string(),
+        name: "Wool Jacket".to_string(),
+        weight: 2.0,
+        item_type: ItemType::Clothing,
+        durability: Some(100.0),
+        properties: ItemProperties {
+            strength: None,
+            warmth: Some(30.0),
+            magic_power: None,
+            nutrition: None,
+            water: None,
+            protection: Some(10.0),
+        },
+    }
+}
+
+fn equip_starting_items(
+    inventory: &mut Inventory,
+    equipped: &mut EquippedItems,
+    (ice_axe, heavy_boots, wool_jacket): (Item, Item, Item),
+) {
+    // Update inventory with starting items
+    inventory.items = vec![ice_axe.clone(), heavy_boots.clone(), wool_jacket.clone()];
+    inventory.current_weight = ice_axe.weight + heavy_boots.weight + wool_jacket.weight;
+
+    // Equip items
+    equipped.axe = Some(ice_axe);
+    equipped.boots = Some(heavy_boots);
+    equipped.jacket = Some(wool_jacket);
 }
 
 pub fn inventory_input_system(
@@ -1505,34 +1342,34 @@ pub fn ice_axe_interaction_system(
     }
 
     for (player_transform, inventory, _equipped) in player_query.iter_mut() {
-        handle_ice_axe_usage(
-            player_transform,
-            inventory,
-            &mut commands,
-            &mut terrain_query,
-            &mut terrain_broken_events,
-        );
+        if has_ice_axe(inventory) {
+            attempt_terrain_break(
+                player_transform,
+                &mut commands,
+                &mut terrain_query,
+                &mut terrain_broken_events,
+            );
+        } else {
+            warn!("❌ No ice axe available! Check your inventory or equipped items.");
+        }
     }
 }
 
-fn handle_ice_axe_usage(
+fn has_ice_axe(inventory: &Inventory) -> bool {
+    get_ice_axe_from_inventory(inventory).is_some()
+}
+
+fn attempt_terrain_break(
     player_transform: &Transform,
-    inventory: &Inventory,
     commands: &mut Commands,
     terrain_query: &mut Query<(Entity, &Transform, &mut TerrainTile, Option<&mut Breakable>)>,
     terrain_broken_events: &mut EventWriter<TerrainBrokenEvent>,
 ) {
-    // Check if player has ice axe equipped or in inventory
-    if get_ice_axe_from_inventory(inventory).is_none() {
-        warn!("❌ No ice axe available! Check your inventory or equipped items.");
-        return;
-    }
-
-    // Find ice terrain within reach and attempt to break it
     let reach_distance = 40.0;
+    
     for (terrain_entity, terrain_transform, mut terrain_tile, breakable) in terrain_query.iter_mut() {
-        if should_break_terrain(player_transform, terrain_transform, &terrain_tile, reach_distance) {
-            break_terrain_with_axe(
+        if is_breakable_terrain_in_reach(player_transform, terrain_transform, &terrain_tile, reach_distance) {
+            process_terrain_break(
                 commands,
                 terrain_entity,
                 &mut terrain_tile,
@@ -1545,17 +1382,19 @@ fn handle_ice_axe_usage(
     }
 }
 
-fn should_break_terrain(
+fn is_breakable_terrain_in_reach(
     player_transform: &Transform,
     terrain_transform: &Transform,
     terrain_tile: &TerrainTile,
     reach_distance: f32,
 ) -> bool {
     let distance = player_transform.translation.distance(terrain_transform.translation);
-    distance <= reach_distance && terrain_tile.terrain_type == TerrainType::Ice
+    let is_ice_terrain = matches!(terrain_tile.terrain_type, TerrainType::Ice | TerrainType::Glacier);
+    
+    distance <= reach_distance && is_ice_terrain
 }
 
-fn break_terrain_with_axe(
+fn process_terrain_break(
     commands: &mut Commands,
     terrain_entity: Entity,
     terrain_tile: &mut TerrainTile,
@@ -1563,23 +1402,29 @@ fn break_terrain_with_axe(
     position: Vec3,
     terrain_broken_events: &mut EventWriter<TerrainBrokenEvent>,
 ) {
-    if let Some(mut breakable_comp) = breakable {
-        break_ice_terrain(
-            commands,
-            terrain_entity,
-            terrain_tile,
-            &mut breakable_comp,
-            position,
-            terrain_broken_events,
-        );
-    } else {
-        // Add Breakable component to ice terrain
-        commands.entity(terrain_entity).insert(Breakable {
-            tool_required: ToolType::IceAxe,
-            durability: 50.0,
-            max_durability: 50.0,
-        });
+    match breakable {
+        Some(mut breakable_comp) => {
+            apply_axe_damage(
+                commands,
+                terrain_entity,
+                terrain_tile,
+                &mut breakable_comp,
+                position,
+                terrain_broken_events,
+            );
+        }
+        None => {
+            add_breakable_component(commands, terrain_entity);
+        }
     }
+}
+
+fn add_breakable_component(commands: &mut Commands, terrain_entity: Entity) {
+    commands.entity(terrain_entity).insert(Breakable {
+        tool_required: ToolType::IceAxe,
+        durability: 50.0,
+        max_durability: 50.0,
+    });
 }
 
 /// Helper function to get ice axe from inventory or equipped items
@@ -1591,7 +1436,7 @@ fn get_ice_axe_from_inventory(inventory: &Inventory) -> Option<&Item> {
 }
 
 /// Break ice terrain with ice axe
-fn break_ice_terrain(
+fn apply_axe_damage(
     commands: &mut Commands,
     terrain_entity: Entity,
     terrain_tile: &mut TerrainTile,
@@ -1599,32 +1444,59 @@ fn break_ice_terrain(
     position: Vec3,
     terrain_broken_events: &mut EventWriter<TerrainBrokenEvent>,
 ) {
-    // Reduce terrain durability
+    let original_terrain_type = terrain_tile.terrain_type.clone();
     let damage = 25.0; // Damage per axe hit
-    breakable.durability = (breakable.durability - damage).max(0.0);
-
-    info!(
-        "🪓 Breaking ice terrain! Durability: {:.1}/{:.1}",
-        breakable.durability, breakable.max_durability
-    );
-
-    // If terrain is broken, change it to passable
-    if breakable.durability <= 0.0 {
-        terrain_tile.terrain_type = TerrainType::Soil; // Convert to passable terrain
-        terrain_tile.climbable = true;
-
-        // Send terrain broken event
-        terrain_broken_events.send(TerrainBrokenEvent {
+    
+    reduce_terrain_durability(breakable, damage, &original_terrain_type);
+    
+    if is_terrain_broken(breakable) {
+        complete_terrain_break(
+            commands,
+            terrain_entity,
+            terrain_tile,
             position,
-            terrain_type: TerrainType::Ice,
-            tool_used: ToolType::IceAxe,
-        });
-
-        // Remove Breakable component as terrain is now broken
-        commands.entity(terrain_entity).remove::<Breakable>();
-
-        info!("✅ Ice terrain broken! Path is now clear.");
+            terrain_broken_events,
+            original_terrain_type,
+        );
     }
+}
+
+fn reduce_terrain_durability(breakable: &mut Breakable, damage: f32, terrain_type: &TerrainType) {
+    breakable.durability = (breakable.durability - damage).max(0.0);
+    
+    info!(
+        "🪓 Breaking {:?} terrain! Durability: {:.1}/{:.1}",
+        terrain_type, breakable.durability, breakable.max_durability
+    );
+}
+
+fn is_terrain_broken(breakable: &Breakable) -> bool {
+    breakable.durability <= 0.0
+}
+
+fn complete_terrain_break(
+    commands: &mut Commands,
+    terrain_entity: Entity,
+    terrain_tile: &mut TerrainTile,
+    position: Vec3,
+    terrain_broken_events: &mut EventWriter<TerrainBrokenEvent>,
+    original_terrain_type: TerrainType,
+) {
+    // Convert to passable terrain
+    terrain_tile.terrain_type = TerrainType::Soil;
+    terrain_tile.climbable = true;
+
+    // Send terrain broken event
+    terrain_broken_events.send(TerrainBrokenEvent {
+        position,
+        terrain_type: original_terrain_type.clone(),
+        tool_used: ToolType::IceAxe,
+    });
+
+    // Remove Breakable component as terrain is now broken
+    commands.entity(terrain_entity).remove::<Breakable>();
+
+    info!("✅ {:?} terrain broken! Path is now clear.", original_terrain_type);
 }
 
 /// System to handle terrain broken events and update visuals

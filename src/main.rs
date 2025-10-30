@@ -22,8 +22,7 @@ fn main() {
             Update,
             (
                 // Phase 2+ systems with health & stamina
-                player_movement_system,
-                stamina_regeneration_system,
+                player_movement_system,  // Consolidated movement and stamina system
                 health_stamina_display_system,
                 update_health_stamina_ui,
                 camera_follow_system,
@@ -47,6 +46,13 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut next_state: ResMut<NextState<GameState>>) {
+    // Generate the new procedural level files
+    if let Err(e) = crate::levels::save_sample_levels() {
+        error!("Failed to generate sample levels: {}", e);
+    } else {
+        info!("Generated new procedural level files");
+    }
+
     // Spawn camera
     commands.spawn(Camera2dBundle::default());
 

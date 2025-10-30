@@ -12,31 +12,40 @@ pub struct Terrain {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TerrainType {
-    Soil,  // Brown - normal movement
-    Ice,   // Light blue - slippery (faster)
-    Rock,  // Gray - slow movement
-    Grass, // Green - normal movement
-    Snow,  // White - slow movement
+    Soil,     // Brown - normal movement (valleys, meadows)
+    Ice,      // Light blue - slippery, fast (ice patches)
+    Rock,     // Gray - slow movement (cliffs, rocky terrain)
+    Grass,    // Green - normal movement (lowlands)
+    Snow,     // White - slow movement (highland snow)
+    Glacier,  // Bright white/blue - very slippery, requires ice axe (Snæfellsjökull glacier)
+    Lava,     // Black/red - impassable or very dangerous (ancient lava fields)
+    Coast,    // Sandy brown - normal speed (coastal areas)
 }
 
 impl TerrainType {
     pub fn color(&self) -> Color {
         match self {
-            TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2), // Brown
-            TerrainType::Ice => Color::srgb(0.7, 0.9, 1.0),  // Light blue
-            TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5), // Gray
-            TerrainType::Grass => Color::srgb(0.3, 0.7, 0.3), // Green
-            TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9), // White
+            TerrainType::Soil => Color::srgb(0.6, 0.4, 0.2),     // Brown
+            TerrainType::Ice => Color::srgb(0.7, 0.9, 1.0),      // Light blue
+            TerrainType::Rock => Color::srgb(0.5, 0.5, 0.5),     // Gray
+            TerrainType::Grass => Color::srgb(0.3, 0.7, 0.3),    // Green
+            TerrainType::Snow => Color::srgb(0.9, 0.9, 0.9),     // White
+            TerrainType::Glacier => Color::srgb(0.8, 0.95, 1.0), // Bright icy blue
+            TerrainType::Lava => Color::srgb(0.2, 0.1, 0.1),     // Dark reddish-black
+            TerrainType::Coast => Color::srgb(0.8, 0.7, 0.5),    // Sandy beige
         }
     }
 
     pub fn movement_modifier(&self) -> f32 {
         match self {
-            TerrainType::Soil => 1.0,
-            TerrainType::Ice => 1.3,  // Slippery - faster
-            TerrainType::Rock => 0.6, // Slow and difficult
-            TerrainType::Grass => 1.0,
-            TerrainType::Snow => 0.7, // Slow in snow
+            TerrainType::Soil => 1.0,      // Normal speed
+            TerrainType::Ice => 1.3,       // Slippery - faster
+            TerrainType::Rock => 0.6,      // Slow and difficult
+            TerrainType::Grass => 1.0,     // Normal speed
+            TerrainType::Snow => 0.7,      // Slow in snow
+            TerrainType::Glacier => 1.5,   // Very slippery - fastest but dangerous
+            TerrainType::Lava => 0.3,      // Extremely slow and dangerous
+            TerrainType::Coast => 0.9,     // Slightly slower due to sand
         }
     }
 }
