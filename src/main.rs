@@ -15,6 +15,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_state::<GameState>()
+        .add_event::<TerrainBrokenEvent>()
         .add_systems(Startup, (setup, setup_ui, load_terrain_from_level))
         .add_systems(PostStartup, setup_starting_equipment)
         .add_systems(
@@ -30,6 +31,9 @@ fn main() {
                 // Equipment systems
                 inventory_input_system,
                 apply_equipment_bonuses,
+                // Ice axe terrain interaction systems
+                ice_axe_interaction_system,
+                terrain_broken_handler_system,
             )
                 .run_if(in_state(GameState::Climbing)),
         )
@@ -42,12 +46,17 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, mut next_state: ResMut<NextState<GameState>>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut next_state: ResMut<NextState<GameState>>) {
     // Spawn camera
     commands.spawn(Camera2dBundle::default());
 
     // Initialize basic game resources
     commands.insert_resource(GameTime::new());
+
+    // Initialize item images resource and load ice axe image
+    let mut item_images = ItemImages::new();
+    item_images.load_item_image(&asset_server, "ice_axe_01", "images/items/ice_axe.png");
+    commands.insert_resource(item_images);
 
     // Spawn player for Phase 2 with Health & Stamina
     commands.spawn((
@@ -71,6 +80,14 @@ fn setup(mut commands: Commands, mut next_state: ResMut<NextState<GameState>>) {
             stamina: 100.0,
             max_stamina: 100.0,
         },
+        // Add inventory and equipment components
+        Inventory {
+            items: Vec::new(),
+            capacity: 20,
+            weight_limit: 50.0,
+            current_weight: 0.0,
+        },
+        EquippedItems::new(),
     ));
 
     // Start in climbing state for Phase 1

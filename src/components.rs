@@ -385,6 +385,16 @@ pub struct InventorySlot {
 }
 
 #[derive(Component)]
+pub struct InventorySlotImage {
+    pub slot_index: usize,
+}
+
+#[derive(Component)]
+pub struct InventorySlotText {
+    pub slot_index: usize,
+}
+
+#[derive(Component)]
 pub struct EquipmentSlot {
     pub slot_type: EquipmentSlotType,
 }
@@ -399,4 +409,39 @@ pub enum EquipmentSlotType {
     Jacket,
     Gloves,
     Backpack,
+}
+
+// ===== ICE AXE INTERACTION COMPONENTS =====
+
+/// Component marking terrain that can be broken with ice axes
+#[derive(Component)]
+pub struct Breakable {
+    pub tool_required: ToolType,
+    pub durability: f32,
+    pub max_durability: f32,
+}
+
+/// Types of tools that can break terrain
+#[derive(Clone, Debug, PartialEq)]
+pub enum ToolType {
+    IceAxe,
+    Pickaxe,
+    Hammer,
+}
+
+/// Component for tracking ice axe usage state
+#[derive(Component)]
+pub struct IceAxeUsage {
+    pub is_breaking: bool,
+    pub target_position: Option<Vec3>,
+    pub break_progress: f32,
+    pub break_duration: f32, // Time needed to break terrain
+}
+
+/// Event for when terrain is broken
+#[derive(Event)]
+pub struct TerrainBrokenEvent {
+    pub position: Vec3,
+    pub terrain_type: TerrainType,
+    pub tool_used: ToolType,
 }

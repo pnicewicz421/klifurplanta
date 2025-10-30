@@ -28,3 +28,5 @@ NPCs and dialogue
 Weather effects
 Magic spells
 Or any other feature you'd like to explore!
+
+now i want you to focus on KLIF-1002 Implement ice axe terrain interaction - Add gameplay mechanic where players can use ice axes from inventory to cut through ice terrain tiles. Make challenging but not impossible - balance difficulty appropriately. so I should pass the following tests: 1) have axe i inventory2) retrieve axe from inventory and put it back 3) use axe on ice tiles to break and proceed further. 4) Can walk on any tile but at potential variable cost to health and stamina.... for axe use existing inventory... mustt pass pmat analyze complexity <= 20 and cyclomatic score <= 10

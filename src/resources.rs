@@ -276,3 +276,27 @@ impl Party {
 
 // Import Weather from states
 use crate::states::Weather;
+
+// ===== ITEM ASSETS =====
+
+#[derive(Resource, Default)]
+pub struct ItemImages {
+    pub handles: HashMap<String, Handle<Image>>,
+}
+
+impl ItemImages {
+    pub fn new() -> Self {
+        Self {
+            handles: HashMap::new(),
+        }
+    }
+
+    pub fn load_item_image(&mut self, asset_server: &AssetServer, item_id: &str, path: &str) {
+        let handle = asset_server.load(path.to_string());
+        self.handles.insert(item_id.to_string(), handle);
+    }
+
+    pub fn get_image(&self, item_id: &str) -> Option<&Handle<Image>> {
+        self.handles.get(item_id)
+    }
+}

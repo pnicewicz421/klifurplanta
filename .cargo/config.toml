@@ -1,12 +1,17 @@
 # Enable faster linking on Linux
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]  # Fastest linker
 
 # Enable faster compilation with more parallel jobs
 [build]
-jobs = 4  # Adjust based on your CPU cores
+jobs = 8  # Increase parallel compilation
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # Use faster incremental compilation
+[env]
+CARGO_INCREMENTAL = "1"
+
+# Speed up builds
 [unstable]
 incremental = true
