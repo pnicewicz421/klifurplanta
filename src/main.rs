@@ -39,6 +39,8 @@ fn main() {
                 npc_proximity_system,
                 conversation_input_system,
                 dialogue_system,
+                dialogue_ui_system,
+                cleanup_dialogue_ui_system,
                 party_invitation_system,
                 npc_behavior_system,
             )

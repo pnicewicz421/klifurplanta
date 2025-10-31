@@ -291,6 +291,25 @@ pub struct InteractionPrompt {
     pub target_npc: Entity,
 }
 
+#[derive(Component)]
+pub struct DialogueUI;
+
+#[derive(Component)]
+pub struct DialogueText;
+
+#[derive(Component)]
+pub struct DialogueOptionUI {
+    pub index: usize,
+}
+
+#[derive(Component)]
+pub struct DialogueCloseButton;
+
+#[derive(Component)]
+pub struct DialogueOptionButton {
+    pub option_index: usize,
+}
+
 // ===== NPC AI BEHAVIOR =====
 
 #[derive(Component)]

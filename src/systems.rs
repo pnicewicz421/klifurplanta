@@ -1615,7 +1615,238 @@ fn start_conversation(
             with_npc: npc_entity,
             current_node: dialogue_tree.current_node.clone(),
         });
+        spawn_dialogue_ui(commands, dialogue_tree, &dialogue_tree.current_node);
         info!("💬 Started conversation with NPC");
+    }
+}
+
+/// System to update dialogue UI when conversation state changes
+pub fn dialogue_ui_system(
+    mut commands: Commands,
+    conversation_query: Query<&InConversation, (With<Player>, Changed<InConversation>)>,
+    npc_query: Query<&DialogueTree>,
+    existing_ui: Query<Entity, With<DialogueUI>>,
+) {
+    // Clean up existing dialogue UI
+    for entity in existing_ui.iter() {
+        commands.entity(entity).despawn_recursive();
+    }
+
+    // Show new dialogue UI if in conversation
+    if let Ok(conversation) = conversation_query.get_single() {
+        if let Ok(dialogue_tree) = npc_query.get(conversation.with_npc) {
+            spawn_dialogue_ui(&mut commands, dialogue_tree, &conversation.current_node);
+        }
+    }
+}
+
+fn spawn_dialogue_ui(
+    commands: &mut Commands,
+    dialogue_tree: &DialogueTree,
+    current_node: &str,
+) {
+    if let Some(node) = dialogue_tree.nodes.get(current_node) {
+        // Main dialogue container
+        commands
+            .spawn((
+                NodeBundle {
+                    style: Style {
+                        width: Val::Percent(80.0),
+                        height: Val::Percent(60.0),
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(10.0),
+                        top: Val::Percent(20.0),
+                        flex_direction: FlexDirection::Column,
+                        border: UiRect::all(Val::Px(3.0)),
+                        padding: UiRect::all(Val::Px(20.0)),
+                        justify_content: JustifyContent::SpaceBetween,
+                        ..default()
+                    },
+                    background_color: Color::srgba(0.1, 0.1, 0.2, 0.95).into(),
+                    border_color: Color::srgb(0.6, 0.6, 0.8).into(),
+                    ..default()
+                },
+                DialogueUI,
+            ))
+            .with_children(|parent| {
+                // Header with speaker name and close button
+                parent
+                    .spawn(NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            height: Val::Px(40.0),
+                            flex_direction: FlexDirection::Row,
+                            justify_content: JustifyContent::SpaceBetween,
+                            align_items: AlignItems::Center,
+                            margin: UiRect::bottom(Val::Px(15.0)),
+                            ..default()
+                        },
+                        ..default()
+                    })
+                    .with_children(|parent| {
+                        // Speaker name
+                        parent.spawn(TextBundle::from_section(
+                            format!("💬 {}", node.speaker),
+                            TextStyle {
+                                font_size: 24.0,
+                                color: Color::srgb(0.9, 0.9, 1.0),
+                                ..default()
+                            },
+                        ));
+                        
+                        // Close button
+                        parent
+                            .spawn((
+                                ButtonBundle {
+                                    style: Style {
+                                        width: Val::Px(30.0),
+                                        height: Val::Px(30.0),
+                                        border: UiRect::all(Val::Px(2.0)),
+                                        justify_content: JustifyContent::Center,
+                                        align_items: AlignItems::Center,
+                                        ..default()
+                                    },
+                                    background_color: Color::srgb(0.8, 0.3, 0.3).into(),
+                                    border_color: Color::srgb(0.9, 0.5, 0.5).into(),
+                                    ..default()
+                                },
+                                DialogueCloseButton,
+                            ))
+                            .with_children(|parent| {
+                                parent.spawn(TextBundle::from_section(
+                                    "×",
+                                    TextStyle {
+                                        font_size: 20.0,
+                                        color: Color::WHITE,
+                                        ..default()
+                                    },
+                                ));
+                            });
+                    });
+
+                // Main dialogue text area
+                parent
+                    .spawn(NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            min_height: Val::Px(80.0),
+                            padding: UiRect::all(Val::Px(15.0)),
+                            margin: UiRect::bottom(Val::Px(20.0)),
+                            ..default()
+                        },
+                        background_color: Color::srgba(0.0, 0.0, 0.1, 0.5).into(),
+                        ..default()
+                    })
+                    .with_children(|parent| {
+                        parent.spawn((
+                            TextBundle::from_section(
+                                &node.text,
+                                TextStyle {
+                                    font_size: 18.0,
+                                    color: Color::srgb(0.95, 0.95, 1.0),
+                                    ..default()
+                                },
+                            ),
+                            DialogueText,
+                        ));
+                    });
+
+                // Dialogue options area
+                parent
+                    .spawn(NodeBundle {
+                        style: Style {
+                            width: Val::Percent(100.0),
+                            flex_direction: FlexDirection::Column,
+                            row_gap: Val::Px(8.0),
+                            ..default()
+                        },
+                        ..default()
+                    })
+                    .with_children(|parent| {
+                        for (index, option) in node.options.iter().enumerate() {
+                            let option_text = format!("{}. {}", index + 1, get_option_action(&option.text));
+                            let button_color = get_option_color(index, &option.text);
+                            
+                            parent
+                                .spawn((
+                                    ButtonBundle {
+                                        style: Style {
+                                            width: Val::Percent(100.0),
+                                            height: Val::Px(45.0),
+                                            border: UiRect::all(Val::Px(2.0)),
+                                            justify_content: JustifyContent::FlexStart,
+                                            align_items: AlignItems::Center,
+                                            padding: UiRect::all(Val::Px(10.0)),
+                                            ..default()
+                                        },
+                                        background_color: button_color.into(),
+                                        border_color: Color::srgb(0.7, 0.7, 0.8).into(),
+                                        ..default()
+                                    },
+                                    DialogueOptionButton { option_index: index },
+                                ))
+                                .with_children(|parent| {
+                                    parent.spawn(TextBundle::from_section(
+                                        option_text,
+                                        TextStyle {
+                                            font_size: 16.0,
+                                            color: Color::WHITE,
+                                            ..default()
+                                        },
+                                    ));
+                                });
+                        }
+                        
+                        // Instructions
+                        parent.spawn(TextBundle::from_section(
+                            "Press 1-4 to choose, Esc to exit, or click the × button",
+                            TextStyle {
+                                font_size: 14.0,
+                                color: Color::srgb(0.7, 0.7, 0.8),
+                                ..default()
+                            },
+                        ));
+                    });
+            });
+    }
+}
+
+fn get_option_action(option_text: &str) -> String {
+    let text_lower = option_text.to_lowercase();
+    
+    let icon = if text_lower.contains("invite") || text_lower.contains("join") || text_lower.contains("party") {
+        "🤝"
+    } else if text_lower.contains("buy") || text_lower.contains("sell") || text_lower.contains("trade") {
+        "💰"
+    } else if text_lower.contains("guidance") || text_lower.contains("advice") || text_lower.contains("help") || text_lower.contains("question") {
+        "❓"
+    } else if text_lower.contains("goodbye") || text_lower.contains("leave") || text_lower.contains("passing") {
+        "👋"
+    } else {
+        "💭"
+    };
+    
+    format!("{} {}", icon, option_text)
+}
+
+fn get_option_color(index: usize, option_text: &str) -> Color {
+    let text_lower = option_text.to_lowercase();
+    
+    if text_lower.contains("invite") || text_lower.contains("join") {
+        Color::srgb(0.2, 0.7, 0.3) // Green for party invites
+    } else if text_lower.contains("buy") || text_lower.contains("sell") || text_lower.contains("trade") {
+        Color::srgb(0.7, 0.6, 0.2) // Gold for trading
+    } else if text_lower.contains("guidance") || text_lower.contains("advice") || text_lower.contains("help") {
+        Color::srgb(0.3, 0.5, 0.8) // Blue for information
+    } else if text_lower.contains("goodbye") || text_lower.contains("leave") {
+        Color::srgb(0.6, 0.4, 0.4) // Muted red for goodbye
+    } else {
+        match index {
+            0 => Color::srgb(0.4, 0.6, 0.7), // Default blues/grays
+            1 => Color::srgb(0.5, 0.5, 0.7),
+            2 => Color::srgb(0.6, 0.5, 0.6),
+            _ => Color::srgb(0.5, 0.5, 0.6),
+        }
     }
 }
 
@@ -1625,10 +1856,28 @@ pub fn dialogue_system(
     mut commands: Commands,
     mut conversation_query: Query<(Entity, &mut InConversation), With<Player>>,
     npc_query: Query<&DialogueTree>,
+    mut button_query: Query<&Interaction, (Changed<Interaction>, With<DialogueCloseButton>)>,
+    mut option_button_query: Query<(&Interaction, &DialogueOptionButton), Changed<Interaction>>,
 ) {
     let Ok((player_entity, mut conversation)) = conversation_query.get_single_mut() else {
         return;
     };
+
+    // Check for close button click
+    for interaction in button_query.iter_mut() {
+        if *interaction == Interaction::Pressed {
+            end_conversation(&mut commands, player_entity);
+            return;
+        }
+    }
+
+    // Check for option button clicks
+    for (interaction, option_button) in option_button_query.iter_mut() {
+        if *interaction == Interaction::Pressed {
+            process_dialogue_choice(&mut commands, player_entity, &mut conversation, &npc_query, option_button.option_index);
+            return;
+        }
+    }
 
     handle_dialogue_input(
         &keyboard_input,
@@ -1685,6 +1934,25 @@ fn process_dialogue_choice(
             }
         }
     }
+}
+
+/// System to clean up dialogue UI when conversation ends
+pub fn cleanup_dialogue_ui_system(
+    mut commands: Commands,
+    player_query: Query<Entity, (With<Player>, Without<InConversation>)>,
+    dialogue_ui_query: Query<Entity, With<DialogueUI>>,
+    mut last_had_conversation: Local<bool>,
+) {
+    let player_has_conversation = player_query.is_empty();
+    
+    // If player had conversation last frame but doesn't now, clean up UI
+    if *last_had_conversation && !player_has_conversation {
+        for entity in dialogue_ui_query.iter() {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+    
+    *last_had_conversation = player_has_conversation;
 }
 
 fn end_conversation(commands: &mut Commands, player_entity: Entity) {
